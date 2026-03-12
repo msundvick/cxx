@@ -110,6 +110,16 @@ use std::process;
 
 pub use crate::cfg::{Cfg, CFG};
 
+impl cc::Build {
+    pub fn export_macro(&mut self, macro_name: &str) -> &mut Self {
+        // Automatically defines it for the C++ compiler
+        self.define(macro_name, "1");
+        // Instructs cxx-gen to decorate the headers and source
+        self.opt.export_macro = Some(macro_name.to_owned());
+        self
+    }
+}
+
 /// This returns a [`cc::Build`] on which you should continue to set up any
 /// additional source files or compiler flags, and lastly call its [`compile`]
 /// method to execute the C++ build.

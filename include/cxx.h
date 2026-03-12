@@ -1,4 +1,24 @@
 #pragma once
+
+// In cxx-ai/include/cxx.h
+#ifndef CXX_API
+#if defined(_WIN32) || defined(__CYGWIN__)
+  #if defined(CXX_EXPORTING)
+    #define CXX_API __declspec(dllexport)
+  #elif defined(CXX_SHARED)
+    #define CXX_API __declspec(dllimport)
+  #else
+    #define CXX_API
+  #endif
+#else
+  #if defined(CXX_EXPORTING) || defined(CXX_SHARED)
+    #define CXX_API __attribute__((visibility("default")))
+  #else
+    #define CXX_API
+  #endif
+#endif
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -35,13 +55,13 @@ struct unsafe_bitcopy_t;
 
 namespace {
 template <typename T>
-class impl;
+class CXX_API impl;
 }
 
 #ifndef CXXBRIDGE1_RUST_STRING
 #define CXXBRIDGE1_RUST_STRING
 // https://cxx.rs/binding/string.html
-class String final {
+class CXX_API String final {
 public:
   String() noexcept;
   String(const String &) noexcept;
@@ -117,7 +137,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_STR
 #define CXXBRIDGE1_RUST_STR
 // https://cxx.rs/binding/str.html
-class Str final {
+class CXX_API Str final {
 public:
   Str() noexcept;
   Str(const String &) noexcept;
@@ -183,7 +203,7 @@ struct copy_assignable_if<false> {
 
 // https://cxx.rs/binding/slice.html
 template <typename T>
-class Slice final
+class CXX_API Slice final
     : private detail::copy_assignable_if<std::is_const<T>::value> {
 public:
   using value_type = T;
@@ -235,7 +255,7 @@ explicit Slice(C &c)
 #endif // __cpp_deduction_guides
 
 template <typename T>
-class Slice<T>::iterator final {
+class CXX_API Slice<T>::iterator final {
 public:
 #if __cplusplus >= 202002L
   using iterator_category = std::contiguous_iterator_tag;
@@ -288,7 +308,7 @@ static_assert(std::contiguous_iterator<rust::Slice<const uint8_t>::iterator>);
 #ifndef CXXBRIDGE1_RUST_BOX
 // https://cxx.rs/binding/box.html
 template <typename T>
-class Box final {
+class CXX_API Box final {
 public:
   using element_type = T;
   using const_pointer =
@@ -337,7 +357,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_VEC
 // https://cxx.rs/binding/vec.html
 template <typename T>
-class Vec final {
+class CXX_API Vec final {
 public:
   using value_type = T;
 
@@ -404,10 +424,10 @@ private:
 #ifndef CXXBRIDGE1_RUST_FN
 // https://cxx.rs/binding/fn.html
 template <typename Signature>
-class Fn;
+class CXX_API Fn;
 
 template <typename Ret, typename... Args>
-class Fn<Ret(Args...)> final {
+class CXX_API Fn<Ret(Args...)> final {
 public:
   Ret operator()(Args... args) const noexcept;
   Fn operator*() const noexcept;
@@ -421,7 +441,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_ERROR
 #define CXXBRIDGE1_RUST_ERROR
 // https://cxx.rs/binding/result.html
-class Error final : public std::exception {
+class CXX_API Error final : public std::exception {
 public:
   Error(const Error &);
   Error(Error &&) noexcept;
@@ -455,7 +475,7 @@ std::ostream &operator<<(std::ostream &, const Str &);
 #ifndef CXXBRIDGE1_RUST_OPAQUE
 #define CXXBRIDGE1_RUST_OPAQUE
 // Base class of generated opaque Rust types.
-class Opaque {
+class CXX_API Opaque {
 public:
   Opaque() = delete;
   Opaque(const Opaque &) = delete;
@@ -754,10 +774,10 @@ void Slice<T>::swap(Slice &rhs) noexcept {
 #ifndef CXXBRIDGE1_RUST_BOX
 #define CXXBRIDGE1_RUST_BOX
 template <typename T>
-class Box<T>::uninit {};
+class CXX_API Box<T>::uninit {};
 
 template <typename T>
-class Box<T>::allocation {
+class CXX_API Box<T>::allocation {
   static T *alloc() noexcept;
   static void dealloc(T *) noexcept;
 
@@ -1054,7 +1074,7 @@ struct is_complete<T, decltype(sizeof(T))> : std::true_type {};
 
 #ifndef CXXBRIDGE1_LAYOUT
 #define CXXBRIDGE1_LAYOUT
-class layout {
+class CXX_API layout {
   template <typename T>
   friend std::size_t size_of();
   template <typename T>
@@ -1121,10 +1141,10 @@ using void_t = typename make_void<Ts...>::type;
 
 template <typename Void, template <typename...> class, typename...>
 struct detect : std::false_type {};
-template <template <typename...> class T, typename... A>
+template <template <typename...> class CXX_API T, typename... A>
 struct detect<void_t<T<A...>>, T, A...> : std::true_type {};
 
-template <template <typename...> class T, typename... A>
+template <template <typename...> class CXX_API T, typename... A>
 using is_detected = detect<void, T, A...>;
 
 template <typename T>
