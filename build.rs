@@ -13,6 +13,7 @@ fn main() {
         .cpp(true)
         .cpp_link_stdlib(None) // linked via link-cplusplus crate
         .std(cxxbridge_flags::STD)
+        .define("CXX_SHARED_LIB", "1")
         .warnings_into_errors(cfg!(deny_warnings))
         .compile("cxxbridge1");
 

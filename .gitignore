@@ -11,3 +11,8 @@
 /expand.rs
 /target/
 /Cargo.lock
+*.dll
+*.so
+*.dylib
+*.o
+test_app
