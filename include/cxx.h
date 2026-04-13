@@ -1,4 +1,32 @@
 #pragma once
+
+// CXX_RUNTIME_API controls visibility of the cxx runtime types (rust::String,
+// rust::Str, rust::Error, rust::Opaque) and their extern "C" trampolines.
+//
+// When building a bundled cdylib, set CXX_SHARED_LIB=1 in your build.rs.
+// When consuming such a cdylib, compile with -DCXX_SHARED.
+//
+// This is intentionally separate from any user-chosen export macro (e.g.
+// MY_ENGINE_API) so that multiple Rust cdylibs can coexist in the same C++
+// project without their runtime-visibility macros colliding.
+#ifndef CXX_RUNTIME_API
+#if defined(_WIN32) || defined(__CYGWIN__)
+  #if defined(CXX_SHARED_LIB)
+    #define CXX_RUNTIME_API __declspec(dllexport)
+  #elif defined(CXX_SHARED)
+    #define CXX_RUNTIME_API __declspec(dllimport)
+  #else
+    #define CXX_RUNTIME_API
+  #endif
+#else
+  #if defined(CXX_SHARED_LIB) || defined(CXX_SHARED)
+    #define CXX_RUNTIME_API __attribute__((visibility("default")))
+  #else
+    #define CXX_RUNTIME_API
+  #endif
+#endif
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -41,7 +69,7 @@ class impl;
 #ifndef CXXBRIDGE1_RUST_STRING
 #define CXXBRIDGE1_RUST_STRING
 // https://cxx.rs/binding/string.html
-class String final {
+class CXX_RUNTIME_API String final {
 public:
   String() noexcept;
   String(const String &) noexcept;
@@ -117,7 +145,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_STR
 #define CXXBRIDGE1_RUST_STR
 // https://cxx.rs/binding/str.html
-class Str final {
+class CXX_RUNTIME_API Str final {
 public:
   Str() noexcept;
   Str(const String &) noexcept;
@@ -421,7 +449,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_ERROR
 #define CXXBRIDGE1_RUST_ERROR
 // https://cxx.rs/binding/result.html
-class Error final : public std::exception {
+class CXX_RUNTIME_API Error final : public std::exception {
 public:
   Error(const Error &);
   Error(Error &&) noexcept;
@@ -455,7 +483,7 @@ std::ostream &operator<<(std::ostream &, const Str &);
 #ifndef CXXBRIDGE1_RUST_OPAQUE
 #define CXXBRIDGE1_RUST_OPAQUE
 // Base class of generated opaque Rust types.
-class Opaque {
+class CXX_RUNTIME_API Opaque {
 public:
   Opaque() = delete;
   Opaque(const Opaque &) = delete;
