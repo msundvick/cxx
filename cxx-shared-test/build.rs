@@ -13,13 +13,15 @@ fn main() {
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
     let out_dir = env::var("OUT_DIR").unwrap();
+    let crate_name = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_");
+
+    build.compile(&crate_name);
 
     if target_os == "windows" && target_env == "msvc" {
         // MSVC dead-code stripping would otherwise remove the generated C++
         // wrappers because Rust never calls them directly.  /WHOLEARCHIVE
         // forces the linker to keep every object file in the archive.
         // Use the full OUT_DIR path so the linker finds the archive reliably.
-        let crate_name = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_");
         let lib_path = PathBuf::from(&out_dir).join(format!("{}.lib", crate_name));
         println!("cargo:rustc-link-arg-cdylib=/WHOLEARCHIVE:{}", lib_path.display());
     } else if target_os == "macos" {
@@ -27,8 +29,9 @@ fn main() {
         // command line, but cargo appends rustc-link-arg-cdylib flags after its
         // own -l flags, so -all_load arrives too late.  Use -force_load with
         // the explicit archive path instead — it is position-independent.
-        let crate_name = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_");
         let lib_path = PathBuf::from(&out_dir).join(format!("lib{}.a", crate_name));
+        println!("cargo:warning=cxx-shared-test: OUT_DIR={}", out_dir);
+        println!("cargo:warning=cxx-shared-test: force_load path={} exists={}", lib_path.display(), lib_path.exists());
         println!("cargo:rustc-link-arg-cdylib=-Wl,-force_load,{}", lib_path.display());
     } else {
         // GNU/LLVM ld: Cargo's default version script hides everything with
@@ -37,7 +40,6 @@ fn main() {
         //
         // The wildcard is derived from the crate name so this template works
         // without modification for any crate.
-        let crate_name = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_");
         let map_path = PathBuf::from(&out_dir).join("export.map");
 
         fs::write(
@@ -61,6 +63,4 @@ fn main() {
         println!("cargo:rustc-link-arg-cdylib=-l{}", crate_name);
         println!("cargo:rustc-link-arg-cdylib=-Wl,--no-whole-archive");
     }
-
-    build.compile(&env::var("CARGO_PKG_NAME").unwrap().replace('-', "_"));
 }
