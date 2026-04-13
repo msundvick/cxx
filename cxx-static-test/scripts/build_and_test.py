@@ -27,7 +27,7 @@ def main():
     if os_name == "Windows":
         # MSVC links the static lib directly into the exe.
         run([
-            "cl.exe", "/EHsc", "/std:c++17", str(consumer),
+            "cl.exe", "/EHsc", "/std:c++17", "/MD", str(consumer),
             f"/I{bridge_inc}", f"/I{rust_inc}",
             str(lib_dir / "cxx_static_test.lib"),
             f"/Fe:{crate_dir / 'test_app.exe'}",
