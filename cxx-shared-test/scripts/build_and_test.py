@@ -3,6 +3,7 @@
 Cross-platform build-and-test for cxx-shared-test (bundled cdylib).
 Run from anywhere; all paths are derived from this script's location.
 """
+import os
 import platform
 import subprocess
 import sys
@@ -33,7 +34,8 @@ def main():
             str(lib_dir / "cxx_shared_test.dll.lib"),
             f"/Fe:{crate_dir / 'test_app.exe'}",
         ], cwd=crate_dir)
-        run([str(crate_dir / "test_app.exe")])
+        env = os.environ | {"PATH": str(lib_dir) + os.pathsep + os.environ.get("PATH", "")}
+        run([str(crate_dir / "test_app.exe")], env=env)
     else:
         run([
             "g++", "-std=c++17", str(consumer),

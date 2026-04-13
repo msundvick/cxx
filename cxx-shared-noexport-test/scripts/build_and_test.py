@@ -11,6 +11,7 @@ symbol names.
 
 Run from anywhere; all paths are derived from this script's location.
 """
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -53,7 +54,8 @@ def main():
             str(import_lib),
             f"/Fe:{crate_dir / 'test_app.exe'}",
         ], cwd=crate_dir)
-        run([str(crate_dir / "test_app.exe")])
+        env = os.environ | {"PATH": str(crate_dir) + os.pathsep + os.environ.get("PATH", "")}
+        run([str(crate_dir / "test_app.exe")], env=env)
 
     elif os_name == "Darwin":
         shared_lib = crate_dir / "libcxx_shared_noexport_test.dylib"
