@@ -25,14 +25,30 @@ fn main() {
         let lib_path = PathBuf::from(&out_dir).join(format!("{}.lib", crate_name));
         println!("cargo:rustc-link-arg-cdylib=/WHOLEARCHIVE:{}", lib_path.display());
     } else if target_os == "macos" {
-        // Apple ld: -all_load only applies to archives that follow it in the
-        // command line, but cargo appends rustc-link-arg-cdylib flags after its
-        // own -l flags, so -all_load arrives too late.  Use -force_load with
-        // the explicit archive path instead — it is position-independent.
+        // Two things are needed to export C++ bridge symbols from a cdylib:
+        //
+        // 1. -force_load: Apple ld only extracts archive members that satisfy
+        //    a referenced symbol.  Rust never calls the C++ wrappers directly,
+        //    so without this flag none of the bridge objects are included.
+        //    Unlike -all_load (which is position-sensitive), -force_load names
+        //    the archive explicitly and works regardless of link-arg ordering.
+        //
+        // 2. -exported_symbols_list: rustc passes its own list to ld64 that
+        //    restricts exports to Rust-known symbols (#[no_mangle] etc.).
+        //    C++ bridge symbols are not in that list, so even though -force_load
+        //    includes the objects, the symbols are suppressed from the export
+        //    table.  ld64 treats multiple -exported_symbols_list args as
+        //    additive (unioned), so a supplemental file adds to rustc's list
+        //    rather than replacing it.
         let lib_path = PathBuf::from(&out_dir).join(format!("lib{}.a", crate_name));
-        println!("cargo:warning=cxx-shared-test: OUT_DIR={}", out_dir);
-        println!("cargo:warning=cxx-shared-test: force_load path={} exists={}", lib_path.display(), lib_path.exists());
+        let exports_path = PathBuf::from(&out_dir).join("exports.txt");
+        fs::write(
+            &exports_path,
+            format!("*{crate}*\n*cxxbridge1*\n", crate = crate_name),
+        )
+        .unwrap();
         println!("cargo:rustc-link-arg-cdylib=-Wl,-force_load,{}", lib_path.display());
+        println!("cargo:rustc-link-arg-cdylib=-Wl,-exported_symbols_list,{}", exports_path.display());
     } else {
         // GNU/LLVM ld: Cargo's default version script hides everything with
         // `local: *`.  We supply our own script that promotes the bridge
