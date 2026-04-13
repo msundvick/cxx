@@ -24,7 +24,7 @@ jobs:
         rust: [nightly, beta, stable, 1.85.0]
         os: [ubuntu]
         cc: [g++]
-        flags: ['']
+        flags: [""]
         include:
           - name: Cargo on macOS
             rust: nightly
@@ -86,8 +86,7 @@ jobs:
             rust: nightly
             os: ubuntu
             cc: clang++
-            flags:
-              -Weverything
+            flags: -Weverything
               -Wno-c++98-compat
               -Wno-c++98-compat-pedantic
               -Wno-c++20-compat
@@ -166,12 +165,12 @@ jobs:
       - name: Setup MSVC environment (windows)
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1
-      - name: cxx-shared-test
-        run: python3 scripts/build_and_test.py
-        working-directory: cxx-shared-test
       - name: cxx-static-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-static-test
+      - name: cxx-shared-test
+        run: python3 scripts/build_and_test.py
+        working-directory: cxx-shared-test
       - name: cxx-shared-noexport-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-noexport-test
@@ -189,7 +188,8 @@ jobs:
       - uses: dtolnay/install@wasmtime-cli
       - run: curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz --location --silent --show-error --fail --retry 2 --output ${{runner.temp}}/wasi-sdk-27.0-x86_64-linux.tar.gz
       - run: tar xf ${{runner.temp}}/wasi-sdk-27.0-x86_64-linux.tar.gz -C ${{runner.temp}}
-      - run: cargo build --target=wasm32-wasip1 --manifest-path=demo/Cargo.toml --release
+      - run:
+          cargo build --target=wasm32-wasip1 --manifest-path=demo/Cargo.toml --release
           --config='target.wasm32-wasip1.linker="${{runner.temp}}/wasi-sdk-27.0-x86_64-linux/bin/lld"'
           --config='target.wasm32-wasip1.rustflags=["-Clink-args=-L${{runner.temp}}/wasi-sdk-27.0-x86_64-linux/share/wasi-sysroot/lib/wasm32-wasip1", "-Clink-args=-lc++abi"]'
         env:
