@@ -62,14 +62,60 @@ impl<'a> Includes<'a> {
     }
 }
 
+fn write_export_macro_definition(
+    out: &mut Content,
+    macro_name: &str,
+    exporting_flag: &str,
+    shared_flag: &str,
+) {
+    writeln!(out, "#ifndef {}", macro_name);
+    writeln!(out, "#if defined(_WIN32) || defined(__CYGWIN__)");
+    writeln!(out, "#if defined({})", exporting_flag);
+    writeln!(out, "#define {} __declspec(dllexport)", macro_name);
+    writeln!(out, "#elif defined({})", shared_flag);
+    writeln!(out, "#define {} __declspec(dllimport)", macro_name);
+    writeln!(out, "#else");
+    writeln!(out, "#define {}", macro_name);
+    writeln!(out, "#endif");
+    writeln!(out, "#else");
+    writeln!(out, "#if defined({}) || defined({})", exporting_flag, shared_flag);
+    writeln!(
+        out,
+        "#define {} __attribute__((visibility(\"default\")))",
+        macro_name
+    );
+    writeln!(out, "#else");
+    writeln!(out, "#define {}", macro_name);
+    writeln!(out, "#endif");
+    writeln!(out, "#endif");
+    writeln!(out, "#endif\n");
+}
+
 pub(super) fn write(out: &mut OutFile) {
     let header = out.header;
     let include = &mut out.include;
     let cxx_header = include.has_cxx_header();
+    let opt = out.opt;
     let out = &mut include.content;
 
     if header {
         writeln!(out, "#pragma once");
+    }
+
+    // CXX_RUNTIME_API is always emitted because the inlined cxx.h content uses
+    // it on rust::String, rust::Str, rust::Error, and rust::Opaque.
+    // It is keyed to CXX_SHARED_LIB (build side) and CXX_SHARED (consume side),
+    // deliberately separate from any user-chosen export macro so that multiple
+    // Rust cdylibs in the same C++ project don't collide.
+    write_export_macro_definition(out, "CXX_RUNTIME_API", "CXX_SHARED_LIB", "CXX_SHARED");
+
+    // If a user export macro is configured (e.g. "MY_ENGINE_API"), emit its
+    // definition.  Flags are derived from the name: MY_ENGINE_API_EXPORTING and
+    // MY_ENGINE_API_SHARED, following the CMake generate_export_header() convention.
+    if let Some(export_macro) = &opt.export_macro {
+        let exporting_flag = format!("{}_EXPORTING", export_macro);
+        let shared_flag = format!("{}_SHARED", export_macro);
+        write_export_macro_definition(out, export_macro, &exporting_flag, &shared_flag);
     }
 
     for include in &include.custom {

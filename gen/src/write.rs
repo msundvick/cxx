@@ -284,6 +284,9 @@ fn write_struct<'a>(out: &mut OutFile<'a>, strct: &'a Struct, methods: &[&Extern
     writeln!(out, "#define {}", guard);
     write_doc(out, "", &strct.doc);
     write!(out, "struct");
+    if let Some(export_macro) = &out.opt.export_macro {
+        write!(out, " {} ", export_macro);
+    }
     if let Some(align) = &strct.align {
         out.builtin.alignmax = true;
         writeln!(out, " alignas(::rust::repr::alignmax<");
@@ -402,11 +405,12 @@ fn write_opaque_type<'a>(out: &mut OutFile<'a>, ety: &'a ExternType, methods: &[
     write_doc(out, "", &ety.doc);
 
     out.builtin.opaque = true;
-    writeln!(
-        out,
-        "struct {} final : public ::rust::Opaque {{",
-        ety.name.cxx,
-    );
+
+    write!(out, "struct ");
+    if let Some(export_macro) = &out.opt.export_macro {
+        write!(out, "{} ", export_macro);
+    }
+    writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx,);
 
     for (i, method) in methods.iter().enumerate() {
         if i > 0 && !method.doc.is_empty() {
@@ -839,6 +843,17 @@ fn write_opaque_type_layout<'a>(out: &mut OutFile<'a>, ety: &'a ExternType) {
 }
 
 fn begin_function_definition(out: &mut OutFile) {
+    if let Some(export_macro) = &out.opt.export_macro {
+        write!(out, "{} ", export_macro);
+    }
+    if let Some(annotation) = &out.opt.cxx_impl_annotations {
+        write!(out, "{} ", annotation);
+    }
+}
+
+/// Like `begin_function_definition` but omits the export macro.
+/// Used for methods, which inherit visibility from their containing struct declaration.
+fn begin_method_definition(out: &mut OutFile) {
     if let Some(annotation) = &out.opt.cxx_impl_annotations {
         write!(out, "{} ", annotation);
     }
@@ -1146,7 +1161,13 @@ fn write_rust_function_shim_decl(
     indirect_call: bool,
     main: bool,
 ) {
-    begin_function_definition(out);
+    // Free functions are exported directly; methods inherit visibility from their struct.
+    if matches!(sig.kind, FnKind::Free) {
+        begin_function_definition(out);
+    } else {
+        begin_method_definition(out);
+    }
+
     if matches!(sig.kind, FnKind::Assoc(_)) && in_class {
         write!(out, "static ");
     }

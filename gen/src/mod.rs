@@ -59,6 +59,9 @@ pub struct Opt {
     /// Impl for handling conditional compilation attributes.
     pub cfg_evaluator: Box<dyn CfgEvaluator>,
 
+    /// Export macro to add, to automatically export c++ symbols (and not require linking the c++ compat layer separately)
+    pub export_macro: Option<String>,
+
     pub(super) gen_header: bool,
     pub(super) gen_implementation: bool,
     pub(super) allow_dot_includes: bool,
@@ -103,6 +106,7 @@ impl Default for Opt {
             gen_header: true,
             gen_implementation: true,
             allow_dot_includes: true,
+            export_macro: None,
             cfg_evaluator: Box::new(UnsupportedCfgEvaluator),
             doxygen: false,
         }
