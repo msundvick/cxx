@@ -13,6 +13,5 @@ fn main() {
     // each mangled symbol name to be listed manually.
     cxx_build::bridge("src/lib.rs")
         .std("c++14")
-        .define("CXX_SHARED_LIB", "1")
         .compile("cxx_shared_noexport_test");
 }
