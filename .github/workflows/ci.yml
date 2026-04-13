@@ -163,6 +163,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-src
+      - name: Setup MSVC environment (windows)
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
       - name: cxx-shared-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-test
