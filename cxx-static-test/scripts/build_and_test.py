@@ -26,10 +26,13 @@ def main():
     os_name = platform.system()
     if os_name == "Windows":
         # MSVC links the static lib directly into the exe.
+        # Rust std pulls in several Windows system libs that MSVC won't
+        # add automatically; list them explicitly here.
         run([
             "cl.exe", "/EHsc", "/std:c++17", "/MD", str(consumer),
             f"/I{bridge_inc}", f"/I{rust_inc}",
             str(lib_dir / "cxx_static_test.lib"),
+            "ntdll.lib", "ws2_32.lib", "userenv.lib", "bcrypt.lib",
             f"/Fe:{crate_dir / 'test_app.exe'}",
         ], cwd=crate_dir)
         run([str(crate_dir / "test_app.exe")])
