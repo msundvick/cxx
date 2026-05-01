@@ -300,6 +300,7 @@ _NORMAL_DEPENDENCIES = {
             "codespan-reporting": Label("@vendor//:codespan-reporting-0.13.1"),
             "foldhash": Label("@vendor//:foldhash-0.2.0"),
             "indexmap": Label("@vendor//:indexmap-2.13.0"),
+            "object": Label("@vendor//:object-0.39.1"),
             "proc-macro2": Label("@vendor//:proc-macro2-1.0.105"),
             "quote": Label("@vendor//:quote-1.0.43"),
             "scratch": Label("@vendor//:scratch-1.0.9"),
@@ -535,6 +536,26 @@ def crate_repositories():
 
     maybe(
         http_archive,
+        name = "vendor__memchr-2.8.0",
+        sha256 = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79",
+        type = "tar.gz",
+        urls = ["https://static.crates.io/crates/memchr/2.8.0/download"],
+        strip_prefix = "memchr-2.8.0",
+        build_file = Label("//third-party/bazel:BUILD.memchr-2.8.0.bazel"),
+    )
+
+    maybe(
+        http_archive,
+        name = "vendor__object-0.39.1",
+        sha256 = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b",
+        type = "tar.gz",
+        urls = ["https://static.crates.io/crates/object/0.39.1/download"],
+        strip_prefix = "object-0.39.1",
+        build_file = Label("//third-party/bazel:BUILD.object-0.39.1.bazel"),
+    )
+
+    maybe(
+        http_archive,
         name = "vendor__proc-macro2-1.0.105",
         sha256 = "535d180e0ecab6268a3e718bb9fd44db66bbbc256257165fc699dadf70d16fe7",
         type = "tar.gz",
@@ -689,6 +710,7 @@ def crate_repositories():
         struct(repo = "vendor__codespan-reporting-0.13.1", is_dev_dep = False),
         struct(repo = "vendor__foldhash-0.2.0", is_dev_dep = False),
         struct(repo = "vendor__indexmap-2.13.0", is_dev_dep = False),
+        struct(repo = "vendor__object-0.39.1", is_dev_dep = False),
         struct(repo = "vendor__proc-macro2-1.0.105", is_dev_dep = False),
         struct(repo = "vendor__quote-1.0.43", is_dev_dep = False),
         struct(repo = "vendor__rustversion-1.0.22", is_dev_dep = False),

@@ -92,6 +92,18 @@ alias(
 )
 
 alias(
+    name = "object-0.39.1",
+    actual = "@vendor__object-0.39.1//:object",
+    tags = ["manual"],
+)
+
+alias(
+    name = "object",
+    actual = "@vendor__object-0.39.1//:object",
+    tags = ["manual"],
+)
+
+alias(
     name = "proc-macro2-1.0.105",
     actual = "@vendor__proc-macro2-1.0.105//:proc_macro2",
     tags = ["manual"],
