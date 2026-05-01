@@ -1,5 +1,5 @@
 [package]
-name = "cxx-static-test"
+name = "cxx-shared-noexport-test"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -8,7 +8,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
-cxx = { path = ".." }
+cxx = { path = "../.." }
 
 [build-dependencies]
-cxx-build = { path = "../gen/build" }
+cxx-build = { path = "../../gen/build" }

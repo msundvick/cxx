@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-cxx = { path = ".." }
+cxx = { path = "../.." }
 
 [build-dependencies]
-cxx-build = { path = "../gen/build" }
+cxx-build = { path = "../../gen/build" }

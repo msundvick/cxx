@@ -167,13 +167,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
       - name: cxx-static-test
         run: python3 scripts/build_and_test.py
-        working-directory: cxx-static-test
+        working-directory: examples/cxx-static-test
       - name: cxx-shared-test
         run: python3 scripts/build_and_test.py
-        working-directory: cxx-shared-test
+        working-directory: examples/cxx-shared-test
       - name: cxx-shared-noexport-test
         run: python3 scripts/build_and_test.py
-        working-directory: cxx-shared-noexport-test
+        working-directory: examples/cxx-shared-noexport-test
         continue-on-error: ${{matrix.os == 'windows'}}
 
   wasi:
