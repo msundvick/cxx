@@ -402,9 +402,11 @@ fn write_opaque_type<'a>(out: &mut OutFile<'a>, ety: &'a ExternType, methods: &[
     write_doc(out, "", &ety.doc);
 
     out.builtin.opaque = true;
-
-    write!(out, "struct ");
-    writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx);
+    writeln!(
+        out,
+        "struct {} final : public ::rust::Opaque {{",
+        ety.name.cxx,
+    );
 
     for (i, method) in methods.iter().enumerate() {
         if i > 0 && !method.doc.is_empty() {
