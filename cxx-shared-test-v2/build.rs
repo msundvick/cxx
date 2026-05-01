@@ -105,12 +105,16 @@ fn extract_symbols(script: &Path, pattern: &str, lib_path: &Path) -> Vec<String>
         return Vec::new();
     }
 
+    // Always invoke through bash: scripts may lack the execute bit in git checkouts,
+    // and using bash explicitly works on both Unix (bash in PATH) and Windows (Git Bash).
     let mut cmd = if cfg!(windows) {
         let mut c = Command::new(r"C:\Program Files\Git\bin\bash.exe");
         c.arg(script);
         c
     } else {
-        Command::new(script)
+        let mut c = Command::new("bash");
+        c.arg(script);
+        c
     };
 
     let output = cmd

@@ -398,7 +398,7 @@ fn generate_bridge(prj: &Project, build: &mut Build, rust_source_file: &Path) ->
         allow_dot_includes: false,
         cfg_evaluator: Box::new(CargoEnvCfgEvaluator),
         doxygen: CFG.doxygen,
-        export_macro: CFG.export_macro.map(|s| s.to_owned()),
+        export_macro: CFG.export_macro.map(ToOwned::to_owned),
         ..Opt::default()
     };
     if !rust_source_file.starts_with(&prj.out_dir) {

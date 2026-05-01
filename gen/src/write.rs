@@ -410,7 +410,7 @@ fn write_opaque_type<'a>(out: &mut OutFile<'a>, ety: &'a ExternType, methods: &[
     if let Some(export_macro) = &out.opt.export_macro {
         write!(out, "{} ", export_macro);
     }
-    writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx,);
+    writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx);
 
     for (i, method) in methods.iter().enumerate() {
         if i > 0 && !method.doc.is_empty() {

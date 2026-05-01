@@ -488,7 +488,7 @@ mod r#impl {
             let exported_header_prefixes = current.exported_header_prefixes.vec();
             let exported_header_links = current.exported_header_links.vec();
             let doxygen = current.doxygen;
-            let export_macro = current.export_macro.map(|s| s.str());
+            let export_macro = current.export_macro.map(InternedString::str);
             super::Cfg {
                 include_prefix,
                 exported_header_dirs,
