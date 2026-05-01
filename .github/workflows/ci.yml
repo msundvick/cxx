@@ -221,10 +221,8 @@ jobs:
           RUSTFLAGS: -Clink-arg=--emrun ${{env.RUSTFLAGS}}
       - name: Create demo.html for demo.js
         run: echo '<!DOCTYPE html><script src="demo.js"></script>' > target/wasm32-unknown-emscripten/release/demo.html
-      - name: Install chromium
-        run: sudo apt-get install -y chromium-browser
       - run: emrun target/wasm32-unknown-emscripten/release/demo.html
-          --browser=$(which chromium-browser)
+          --browser=$(which google-chrome-stable)
           --browser_args=--headless
           --log_stdout=${{runner.temp}}/demo.log
           --timeout=60
