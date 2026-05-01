@@ -22,7 +22,7 @@ fn main() {
         // wrappers because Rust never calls them directly.  /WHOLEARCHIVE
         // forces the linker to keep every object file in the archive.
         // Use the full OUT_DIR path so the linker finds the archive reliably.
-        let lib_path = PathBuf::from(&out_dir).join(format!("{}.lib", crate_name));
+        let lib_path = PathBuf::from(&out_dir).join(format!("{crate_name}.lib"));
         println!("cargo:rustc-link-arg-cdylib=/WHOLEARCHIVE:{}", lib_path.display());
     } else if target_os == "macos" {
         // Two things are needed to export C++ bridge symbols from a cdylib:
@@ -40,11 +40,11 @@ fn main() {
         //    table.  ld64 treats multiple -exported_symbols_list args as
         //    additive (unioned), so a supplemental file adds to rustc's list
         //    rather than replacing it.
-        let lib_path = PathBuf::from(&out_dir).join(format!("lib{}.a", crate_name));
+        let lib_path = PathBuf::from(&out_dir).join(format!("lib{crate_name}.a"));
         let exports_path = PathBuf::from(&out_dir).join("exports.txt");
         fs::write(
             &exports_path,
-            format!("*{crate}*\n*cxxbridge1*\n", crate = crate_name),
+            format!("*{crate_name}*\n*cxxbridge1*\n"),
         )
         .unwrap();
         println!("cargo:rustc-link-arg-cdylib=-Wl,-force_load,{}", lib_path.display());
@@ -61,8 +61,7 @@ fn main() {
         fs::write(
             &map_path,
             format!(
-                "{{\n  global:\n    *{crate}*;\n    *rust*cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n",
-                crate = crate_name
+                "{{\n  global:\n    *{crate_name}*;\n    *rust*cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n"
             ),
         )
         .unwrap();
@@ -76,7 +75,7 @@ fn main() {
         // even though Rust never calls them directly.  We scope --whole-archive
         // tightly to avoid pulling in duplicate cxxbridge1 symbols.
         println!("cargo:rustc-link-arg-cdylib=-Wl,--whole-archive");
-        println!("cargo:rustc-link-arg-cdylib=-l{}", crate_name);
+        println!("cargo:rustc-link-arg-cdylib=-l{crate_name}");
         println!("cargo:rustc-link-arg-cdylib=-Wl,--no-whole-archive");
     }
 }

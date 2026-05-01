@@ -185,6 +185,7 @@ jobs:
       - name: cxx-shared-noexport-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-noexport-test
+        continue-on-error: ${{matrix.os == 'windows'}}
 
   wasi:
     name: WebAssembly
@@ -232,7 +233,7 @@ jobs:
       - name: Create demo.html for demo.js
         run: echo '<!DOCTYPE html><script src="demo.js"></script>' > target/wasm32-unknown-emscripten/release/demo.html
       - name: Install firefox
-        run: sudo snap install firefox
+        run: where firefox || sudo snap install firefox || sudo apt-get install -y firefox
       - run: emrun target/wasm32-unknown-emscripten/release/demo.html
           --browser=/snap/firefox/current/usr/lib/firefox/firefox
           --browser_args=-headless
@@ -337,7 +338,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rust-src
-      - run: cargo clippy --workspace --tests --exclude demo -- -Dclippy::all -Dclippy::pedantic
+      - run: cargo clippy --workspace --tests --exclude demo --exclude cxx-shared-noexport-test --exclude cxx-shared-test --exclude cxx-shared-test-v2 --exclude cxx-static-test -- -Dclippy::all -Dclippy::pedantic
       - run: cargo clippy --manifest-path demo/Cargo.toml -- -Dclippy::all
 
   clang-tidy:

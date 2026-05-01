@@ -25,6 +25,7 @@ pub struct Engine {
     points: Vec<ffi::Point>,
 }
 
+#[must_use] 
 pub fn new_engine() -> Box<Engine> {
     Box::new(Engine { points: Vec::new() })
 }

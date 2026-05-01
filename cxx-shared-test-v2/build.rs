@@ -18,15 +18,15 @@ fn main() {
         .std("c++14")
         .compile(&crate_name);
 
-    println!("cargo::rustc-link-search=native={}", out_dir);
-    println!("cargo::rustc-link-lib=static:+whole-archive={}", crate_name);
+    println!("cargo::rustc-link-search=native={out_dir}");
+    println!("cargo::rustc-link-lib=static:+whole-archive={crate_name}");
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
     if target_os == "windows" && target_env == "msvc" {
         let emit_export = |symbol: &str| {
-            println!("cargo::rustc-link-arg=/EXPORT:{}", symbol);
+            println!("cargo::rustc-link-arg=/EXPORT:{symbol}");
         };
 
         // cxx.cc (cxxbridge1) symbols - pre-extracted, committed to source
@@ -39,22 +39,21 @@ fn main() {
         }
 
         // bridge lib symbols - extracted at build time
-        let bridge_lib = Path::new(&out_dir).join(format!("{}.lib", crate_name));
+        let bridge_lib = Path::new(&out_dir).join(format!("{crate_name}.lib"));
         let script = manifest_dir.join("exports/extract-symbols-win");
         for symbol in extract_symbols(&script, "cxx_shared_test_v2", &bridge_lib) {
             emit_export(&symbol);
         }
     } else if target_os == "macos" {
         // -installed_name makes the dylib relocatable via @rpath
-        let lib_name = format!("lib{}.dylib", crate_name);
+        let lib_name = format!("lib{crate_name}.dylib");
         println!(
-            "cargo::rustc-link-arg=-Wl,-install_name,@rpath/{}",
-            lib_name
+            "cargo::rustc-link-arg=-Wl,-install_name,@rpath/{lib_name}"
         );
 
         let emit_export = |symbol: &str| {
             // -exported_symbol is additive; -exported_symbols_list overrides rustc's list
-            println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{}", symbol);
+            println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{symbol}");
         };
 
         // cxx.cc (cxxbridge1) symbols - pre-extracted, committed to source
@@ -67,7 +66,7 @@ fn main() {
         }
 
         // bridge lib symbols - extracted at build time
-        let bridge_lib = Path::new(&out_dir).join(format!("lib{}.a", crate_name));
+        let bridge_lib = Path::new(&out_dir).join(format!("lib{crate_name}.a"));
         let script = manifest_dir.join("exports/extract-symbols-mac");
         for symbol in extract_symbols(&script, "cxx_shared_test_v2", &bridge_lib) {
             emit_export(&symbol);
@@ -78,8 +77,7 @@ fn main() {
         std::fs::write(
             &map_path,
             format!(
-                "{{\n  global:\n    *{crate}*;\n    *rust10cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n",
-                crate = crate_name
+                "{{\n  global:\n    *{crate_name}*;\n    *rust10cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n"
             ),
         )
         .unwrap();
