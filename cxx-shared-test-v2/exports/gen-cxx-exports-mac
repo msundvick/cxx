@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Extracts cxx.cc (cxxbridge1) symbols from the macOS static lib and writes
+# them to cxx-exports-mac.txt.  Run this once after a cxx version bump, then
+# commit the output file.
+#
+# Invoke from the cxx-shared-test-v2 directory:
+#   ./exports/cxx-clean
+#   rm -f ./exports/cxx-exports-mac.txt
+#   cargo build
+#   ./exports/gen-cxx-exports-mac
+#   cargo build   # verify linking with the new exports
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+out="$script_dir/cxx-exports-mac.txt"
+
+# Find libcxxbridge1.a anywhere under target/
+lib=$(find "$repo_root/target" -name "libcxxbridge1.a" 2>/dev/null | head -1)
+if [ -z "$lib" ]; then
+    echo "error: libcxxbridge1.a not found under $repo_root/target. Run 'cargo build' first." >&2
+    exit 1
+fi
+
+echo "# cxx.cc (cxxbridge1) symbols for macOS" > "$out"
+echo "# Generated from: $lib" >> "$out"
+echo "# Re-generate with: ./exports/gen-cxx-exports-mac" >> "$out"
+
+bash "$script_dir/extract-symbols-mac" "rust10cxxbridge1" "$lib" >> "$out"
+
+echo "Wrote $(grep -c '^[^#]' "$out") symbols to $out"

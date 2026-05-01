@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Usage: extract-symbols-mac <grep-pattern> <path-to-archive.a>
+# Lists defined C++ mangled symbols from a static archive matching the given pattern.
+# Output: one symbol per line (with leading underscore as ld64 expects), sorted and deduplicated.
+set -euo pipefail
+
+pattern="$1"
+lib="$2"
+
+nm -g "$lib" 2>/dev/null \
+    | awk '/^[0-9a-f]+ [TDCGB] / { print $3 }' \
+    | grep "$pattern" \
+    | LC_ALL=C sort -u

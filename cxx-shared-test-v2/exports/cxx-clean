@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Removes cxx.rs build artifacts so the next 'cargo build' regenerates them fresh.
+# Use before running gen-cxx-exports-{os} to ensure you pick up the current cxx version.
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+
+find "$repo_root/target" -name "libcxxbridge1.a" -o -name "cxxbridge1.lib" 2>/dev/null \
+    | while read -r f; do
+        echo "Removing $f"
+        rm -f "$f"
+    done
+
+echo "Done."

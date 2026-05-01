@@ -176,6 +176,12 @@ jobs:
         continue-on-error: ${{matrix.os == 'macos'}}
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-test
+      - name: cxx-shared-test-v2
+        # Per-symbol export approach (no CXX_API macros).
+        # macOS uses -exported_symbol (additive) instead of -exported_symbols_list,
+        # which should fix the known symbol-suppression issue in cxx-shared-test.
+        run: python3 scripts/build_and_test.py
+        working-directory: cxx-shared-test-v2
       - name: cxx-shared-noexport-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-noexport-test
