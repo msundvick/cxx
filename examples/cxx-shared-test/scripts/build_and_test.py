@@ -24,7 +24,7 @@ def run(cmd, **kwargs):
 
 def main():
     crate_dir = Path(__file__).resolve().parent.parent
-    repo_root = crate_dir.parent
+    repo_root = crate_dir.parent.parent
     lib_dir = repo_root / "target" / "debug"
     bridge_inc = repo_root / "target" / "cxxbridge" / "cxx-shared-test" / "src"
     rust_inc = repo_root / "target" / "cxxbridge" / "rust"
