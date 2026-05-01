@@ -21,6 +21,12 @@ fn main() {
     println!("cargo:rerun-if-changed=include/cxx.h");
     println!("cargo:rustc-cfg=built_with_cargo");
 
+    // Expose OUT_DIR so dependents can locate libcxxbridge1.a / cxxbridge1.lib
+    // for per-symbol shared library export (consumed as DEP_CXXBRIDGE1_LIB_DIR).
+    if let Ok(out_dir) = env::var("OUT_DIR") {
+        println!("cargo:LIB_DIR={out_dir}");
+    }
+
     if let Some(manifest_dir) = &manifest_dir_opt {
         let cxx_h = manifest_dir.join("include").join("cxx.h");
         println!("cargo:HEADER={}", cxx_h.to_string_lossy());

@@ -87,6 +87,7 @@ mod gen;
 mod intern;
 mod out;
 mod paths;
+mod symbols;
 mod syntax;
 mod target;
 mod vec;
@@ -137,6 +138,82 @@ pub fn bridges(rust_source_files: impl IntoIterator<Item = impl AsRef<Path>>) ->
         let _ = writeln!(io::stderr(), "\n\ncxxbridge error: {}\n\n", report(err));
         process::exit(1);
     })
+}
+
+/// Compile a cxx bridge as a shared library (`cdylib`), handling all
+/// platform-specific symbol export logic internally.
+///
+/// This is a drop-in replacement for calling `.compile(name)` directly when
+/// the crate type is `cdylib`.  It suppresses cc's default cargo link
+/// metadata, re-emits it with `+whole-archive` to force C++ bridge objects
+/// into the shared library, and emits the appropriate per-symbol or
+/// version-script linker arguments for the current platform — all in pure
+/// Rust, with no external tools or committed artifact files.
+///
+/// # Example
+///
+/// ```no_run
+/// // build.rs
+/// fn main() {
+///     let build = cxx_build::bridge("src/lib.rs");
+///     cxx_build::compile_as_shared_lib(build, "mylib");
+/// }
+/// ```
+pub fn compile_as_shared_lib(mut build: Build, name: &str) {
+    build.cargo_metadata(false);
+    build.compile(name);
+    emit_shared_lib_args(name);
+}
+
+fn emit_shared_lib_args(name: &str) {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+
+    // Force all C++ bridge objects (which Rust never calls directly) into the output.
+    println!("cargo::rustc-link-search=native={out_dir}");
+    println!("cargo::rustc-link-lib=static:+whole-archive={name}");
+
+    if target_os == "windows" && target_env == "msvc" {
+        let bridge_lib = PathBuf::from(&out_dir).join(format!("{name}.lib"));
+        for sym in symbols::extract_symbols(&bridge_lib, name) {
+            println!("cargo::rustc-link-arg=/EXPORT:{sym}");
+        }
+        if let Ok(cxxbridge_dir) = env::var("DEP_CXXBRIDGE1_LIB_DIR") {
+            let cxxbridge_lib = PathBuf::from(cxxbridge_dir).join("cxxbridge1.lib");
+            for sym in symbols::extract_symbols(&cxxbridge_lib, "cxxbridge1") {
+                println!("cargo::rustc-link-arg=/EXPORT:{sym}");
+            }
+        }
+    } else if target_os == "macos" {
+        let lib_name = format!("lib{name}.dylib");
+        println!("cargo::rustc-link-arg=-Wl,-install_name,@rpath/{lib_name}");
+
+        let bridge_lib = PathBuf::from(&out_dir).join(format!("lib{name}.a"));
+        for sym in symbols::extract_symbols(&bridge_lib, name) {
+            println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{sym}");
+        }
+        if let Ok(cxxbridge_dir) = env::var("DEP_CXXBRIDGE1_LIB_DIR") {
+            let cxxbridge_lib = PathBuf::from(cxxbridge_dir).join("libcxxbridge1.a");
+            for sym in symbols::extract_symbols(&cxxbridge_lib, "rust10cxxbridge1") {
+                println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{sym}");
+            }
+        }
+    } else {
+        // GNU ld: version script with glob patterns — no per-symbol extraction needed.
+        let map_path = PathBuf::from(&out_dir).join("export.map");
+        std::fs::write(
+            &map_path,
+            format!(
+                "{{\n  global:\n    *{name}*;\n    *rust10cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n"
+            ),
+        )
+        .expect("failed to write export.map");
+        println!(
+            "cargo::rustc-link-arg=-Wl,--version-script={}",
+            map_path.display()
+        );
+    }
 }
 
 struct Project {
