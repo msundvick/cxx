@@ -284,9 +284,6 @@ fn write_struct<'a>(out: &mut OutFile<'a>, strct: &'a Struct, methods: &[&Extern
     writeln!(out, "#define {}", guard);
     write_doc(out, "", &strct.doc);
     write!(out, "struct");
-    if let Some(export_macro) = &out.opt.export_macro {
-        write!(out, " {} ", export_macro);
-    }
     if let Some(align) = &strct.align {
         out.builtin.alignmax = true;
         writeln!(out, " alignas(::rust::repr::alignmax<");
@@ -407,9 +404,6 @@ fn write_opaque_type<'a>(out: &mut OutFile<'a>, ety: &'a ExternType, methods: &[
     out.builtin.opaque = true;
 
     write!(out, "struct ");
-    if let Some(export_macro) = &out.opt.export_macro {
-        write!(out, "{} ", export_macro);
-    }
     writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx);
 
     for (i, method) in methods.iter().enumerate() {
@@ -843,9 +837,6 @@ fn write_opaque_type_layout<'a>(out: &mut OutFile<'a>, ety: &'a ExternType) {
 }
 
 fn begin_function_definition(out: &mut OutFile) {
-    if let Some(export_macro) = &out.opt.export_macro {
-        write!(out, "{} ", export_macro);
-    }
     if let Some(annotation) = &out.opt.cxx_impl_annotations {
         write!(out, "{} ", annotation);
     }

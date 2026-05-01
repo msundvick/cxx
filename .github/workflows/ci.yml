@@ -169,24 +169,8 @@ jobs:
         run: python3 scripts/build_and_test.py
         working-directory: cxx-static-test
       - name: cxx-shared-test
-        # Known issue on macOS: rustc's -exported_symbols_list suppresses the
-        # C++ bridge symbols from the cdylib export table.  See the script's
-        # module docstring for details.  Allow failure so the other tests still
-        # run while this is under investigation.
-        continue-on-error: ${{matrix.os == 'macos'}}
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-test
-      - name: cxx-shared-test-v2
-        # Per-symbol export approach (no CXX_API macros).
-        # macOS uses -exported_symbol (additive) instead of -exported_symbols_list,
-        # which should fix the known symbol-suppression issue in cxx-shared-test.
-        run: python3 scripts/build_and_test.py
-        working-directory: cxx-shared-test-v2
-      - name: cxx-shared-test-v3
-        # Per-symbol export via the object crate inside cxx-build.
-        # Pure Rust: no bash scripts, no committed artifact files.
-        run: python3 scripts/build_and_test.py
-        working-directory: cxx-shared-test-v3
       - name: cxx-shared-noexport-test
         run: python3 scripts/build_and_test.py
         working-directory: cxx-shared-noexport-test
@@ -343,7 +327,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rust-src
-      - run: cargo clippy --workspace --tests --exclude demo --exclude cxx-shared-noexport-test --exclude cxx-shared-test --exclude cxx-shared-test-v2 --exclude cxx-static-test -- -Dclippy::all -Dclippy::pedantic
+      - run: cargo clippy --workspace --tests --exclude demo --exclude cxx-shared-noexport-test --exclude cxx-shared-test --exclude cxx-static-test -- -Dclippy::all -Dclippy::pedantic
       - run: cargo clippy --manifest-path demo/Cargo.toml -- -Dclippy::all
 
   clang-tidy:

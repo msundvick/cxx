@@ -6,26 +6,22 @@ use object::{Object, ObjectSymbol, SymbolScope};
 /// Extract globally-visible, defined symbol names from a static archive whose
 /// mangled name contains `pattern`.  Returns a sorted, deduplicated list.
 pub(crate) fn extract_symbols(lib_path: &Path, pattern: &str) -> Vec<String> {
-    let data = match std::fs::read(lib_path) {
-        Ok(d) => d,
-        Err(_) => return Vec::new(),
+    let Ok(data) = std::fs::read(lib_path) else {
+        return Vec::new();
     };
 
-    let archive = match ArchiveFile::parse(data.as_slice()) {
-        Ok(a) => a,
-        Err(_) => return Vec::new(),
+    let Ok(archive) = ArchiveFile::parse(data.as_slice()) else {
+        return Vec::new();
     };
 
     let mut symbols = Vec::new();
 
     for member in archive.members().flatten() {
-        let obj_data = match member.data(data.as_slice()) {
-            Ok(d) => d,
-            Err(_) => continue,
+        let Ok(obj_data) = member.data(data.as_slice()) else {
+            continue;
         };
-        let obj = match object::File::parse(obj_data) {
-            Ok(o) => o,
-            Err(_) => continue,
+        let Ok(obj) = object::File::parse(obj_data) else {
+            continue;
         };
         for sym in obj.symbols() {
             if sym.is_undefined() {

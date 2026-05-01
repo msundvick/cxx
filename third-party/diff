@@ -1,0 +1,2218 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 0e1e697c..de0272b7 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -24,7 +24,7 @@ jobs:
+         rust: [nightly, beta, stable, 1.85.0]
+         os: [ubuntu]
+         cc: [g++]
+-        flags: ['']
++        flags: [""]
+         include:
+           - name: Cargo on macOS
+             rust: nightly
+@@ -86,8 +86,7 @@ jobs:
+             rust: nightly
+             os: ubuntu
+             cc: clang++
+-            flags:
+-              -Weverything
++            flags: -Weverything
+               -Wno-c++98-compat
+               -Wno-c++98-compat-pedantic
+               -Wno-c++20-compat
+@@ -145,6 +144,38 @@ jobs:
+           path: Cargo.lock
+         continue-on-error: true
+ 
++  shared-lib-tests:
++    name: Shared-lib tests on ${{matrix.os}}
++    needs: pre_ci
++    if: needs.pre_ci.outputs.continue
++    runs-on: ${{matrix.os}}-latest
++    strategy:
++      fail-fast: false
++      matrix:
++        os: [ubuntu, macos, windows]
++    timeout-minutes: 45
++    steps:
++      - name: Enable symlinks (windows)
++        if: matrix.os == 'windows'
++        run: git config --global core.symlinks true
++      - uses: actions/checkout@v6
++      - uses: dtolnay/rust-toolchain@stable
++        with:
++          components: rust-src
++      - name: Setup MSVC environment (windows)
++        if: matrix.os == 'windows'
++        uses: ilammy/msvc-dev-cmd@v1
++      - name: cxx-static-test
++        run: python3 scripts/build_and_test.py
++        working-directory: cxx-static-test
++      - name: cxx-shared-test
++        run: python3 scripts/build_and_test.py
++        working-directory: cxx-shared-test
++      - name: cxx-shared-noexport-test
++        run: python3 scripts/build_and_test.py
++        working-directory: cxx-shared-noexport-test
++        continue-on-error: ${{matrix.os == 'windows'}}
++
+   wasi:
+     name: WebAssembly
+     runs-on: ubuntu-latest
+@@ -158,7 +189,8 @@ jobs:
+       - uses: dtolnay/install@wasmtime-cli
+       - run: curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz --location --silent --show-error --fail --retry 2 --output ${{runner.temp}}/wasi-sdk-27.0-x86_64-linux.tar.gz
+       - run: tar xf ${{runner.temp}}/wasi-sdk-27.0-x86_64-linux.tar.gz -C ${{runner.temp}}
+-      - run: cargo build --target=wasm32-wasip1 --manifest-path=demo/Cargo.toml --release
++      - run:
++          cargo build --target=wasm32-wasip1 --manifest-path=demo/Cargo.toml --release
+           --config='target.wasm32-wasip1.linker="${{runner.temp}}/wasi-sdk-27.0-x86_64-linux/bin/lld"'
+           --config='target.wasm32-wasip1.rustflags=["-Clink-args=-L${{runner.temp}}/wasi-sdk-27.0-x86_64-linux/share/wasi-sysroot/lib/wasm32-wasip1", "-Clink-args=-lc++abi"]'
+         env:
+@@ -190,7 +222,7 @@ jobs:
+       - name: Create demo.html for demo.js
+         run: echo '<!DOCTYPE html><script src="demo.js"></script>' > target/wasm32-unknown-emscripten/release/demo.html
+       - name: Install firefox
+-        run: sudo snap install firefox
++        run: where firefox || sudo snap install firefox || sudo apt-get install -y firefox
+       - run: emrun target/wasm32-unknown-emscripten/release/demo.html
+           --browser=/snap/firefox/current/usr/lib/firefox/firefox
+           --browser_args=-headless
+@@ -295,7 +327,7 @@ jobs:
+       - uses: dtolnay/rust-toolchain@nightly
+         with:
+           components: clippy, rust-src
+-      - run: cargo clippy --workspace --tests --exclude demo -- -Dclippy::all -Dclippy::pedantic
++      - run: cargo clippy --workspace --tests --exclude demo --exclude cxx-shared-noexport-test --exclude cxx-shared-test --exclude cxx-static-test -- -Dclippy::all -Dclippy::pedantic
+       - run: cargo clippy --manifest-path demo/Cargo.toml -- -Dclippy::all
+ 
+   clang-tidy:
+diff --git a/.gitignore b/.gitignore
+index 3dfe7323..0cda72bd 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,3 +11,8 @@
+ /expand.rs
+ /target/
+ /Cargo.lock
++*.dll
++*.so
++*.dylib
++*.o
++test_app
+\ No newline at end of file
+diff --git a/Cargo.toml b/Cargo.toml
+index de521ffc..ee13eb81 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -51,7 +51,7 @@ cxx-build = { version = "=1.0.194", path = "gen/build" }
+ cxxbridge-cmd = { version = "=1.0.194", path = "gen/cmd" }
+ 
+ [workspace]
+-members = ["demo", "flags", "gen/build", "gen/cmd", "gen/lib", "macro", "tests/ffi"]
++members = ["cxx-shared-test", "cxx-static-test", "cxx-shared-noexport-test", "demo", "flags", "gen/build", "gen/cmd", "gen/lib", "macro", "tests/ffi"]
+ 
+ [package.metadata.docs.rs]
+ targets = ["x86_64-unknown-linux-gnu"]
+diff --git a/MODULE.bazel.lock b/MODULE.bazel.lock
+index 7aac1819..0ae83942 100644
+--- a/MODULE.bazel.lock
++++ b/MODULE.bazel.lock
+@@ -133,8 +133,8 @@
+     "https://bcr.bazel.build/modules/rules_java/8.3.2/MODULE.bazel": "7336d5511ad5af0b8615fdc7477535a2e4e723a357b6713af439fe8cf0195017",
+     "https://bcr.bazel.build/modules/rules_java/8.5.1/MODULE.bazel": "d8a9e38cc5228881f7055a6079f6f7821a073df3744d441978e7a43e20226939",
+     "https://bcr.bazel.build/modules/rules_java/8.6.1/MODULE.bazel": "f4808e2ab5b0197f094cabce9f4b006a27766beb6a9975931da07099560ca9c2",
+-    "https://bcr.bazel.build/modules/rules_java/9.0.3/MODULE.bazel": "1f98ed015f7e744a745e0df6e898a7c5e83562d6b759dfd475c76456dda5ccea",
+-    "https://bcr.bazel.build/modules/rules_java/9.0.3/source.json": "b038c0c07e12e658135bbc32cc1a2ded6e33785105c9d41958014c592de4593e",
++    "https://bcr.bazel.build/modules/rules_java/9.1.0/MODULE.bazel": "ee63f27e36a3fada80342869361182f120a9819c74320e8e65b1e04ba0cd7a9d",
++    "https://bcr.bazel.build/modules/rules_java/9.1.0/source.json": "da589573c1dee2c9ac4a568b301269a2e8191110ff0345c1a959fa7ea6c4dfd6",
+     "https://bcr.bazel.build/modules/rules_jvm_external/4.4.2/MODULE.bazel": "a56b85e418c83eb1839819f0b515c431010160383306d13ec21959ac412d2fe7",
+     "https://bcr.bazel.build/modules/rules_jvm_external/5.1/MODULE.bazel": "33f6f999e03183f7d088c9be518a63467dfd0be94a11d0055fe2d210f89aa909",
+     "https://bcr.bazel.build/modules/rules_jvm_external/5.2/MODULE.bazel": "d9351ba35217ad0de03816ef3ed63f89d411349353077348a45348b096615036",
+@@ -195,9 +195,31 @@
+   },
+   "selectedYankedVersions": {},
+   "moduleExtensions": {
++    "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
++      "general": {
++        "bzlTransitiveDigest": "b+RP7Sgl8KN0VHamrgTqzGLuYPcQ/Mo4ptNkkHUIIlA=",
++        "usagesDigest": "D1r3lfzMuUBFxgG8V6o0bQTLMk3GkaGOaPzw53wrwyw=",
++        "recordedInputs": [
++          "REPO_MAPPING:pybind11_bazel+,bazel_tools bazel_tools",
++          "FILE:@@pybind11_bazel+//MODULE.bazel e6f4c20442eaa7c90d7190d8dc539d0ab422f95c65a57cc59562170c58ae3d34"
++        ],
++        "generatedRepoSpecs": {
++          "pybind11": {
++            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
++            "attributes": {
++              "build_file": "@@pybind11_bazel+//:pybind11-BUILD.bazel",
++              "strip_prefix": "pybind11-2.12.0",
++              "urls": [
++                "https://github.com/pybind/pybind11/archive/v2.12.0.zip"
++              ]
++            }
++          }
++        }
++      }
++    },
+     "@@rules_kotlin+//src/main/starlark/core/repositories:bzlmod_setup.bzl%rules_kotlin_extensions": {
+       "general": {
+-        "bzlTransitiveDigest": "ABI1D/sbS1ovwaW/kHDoj8nnXjQ0oKU9fzmzEG4iT8o=",
++        "bzlTransitiveDigest": "Ga4z8lQy1YQ5rAMy+dOl0dqcCEBnYNCXku8x3YQmDZI=",
+         "usagesDigest": "QI2z8ZUR+mqtbwsf2fLqYdJAkPOHdOV+tF2yVAUgRzw=",
+         "recordedInputs": [
+           "REPO_MAPPING:rules_kotlin+,bazel_tools bazel_tools"
+@@ -254,7 +276,7 @@
+     },
+     "@@rules_python+//python/extensions:config.bzl%config": {
+       "general": {
+-        "bzlTransitiveDigest": "2hLgIvNVTLgxus0ZuXtleBe70intCfo0cHs8qvt6cdM=",
++        "bzlTransitiveDigest": "iibnRYgg8LpcfmH7EAnVwYePC3jsVaJ6Id8XxUjSZps=",
+         "usagesDigest": "ZVSXMAGpD+xzVNPuvF1IoLBkty7TROO0+akMapt1pAg=",
+         "recordedInputs": [
+           "REPO_MAPPING:rules_python+,bazel_tools bazel_tools",
+@@ -449,6 +471,105 @@
+           }
+         }
+       }
++    },
++    "@@rules_rust+//crate_universe/private:internal_extensions.bzl%cu_nr": {
++      "general": {
++        "bzlTransitiveDigest": "Ge+KjZy8QMnoPMgIt4mv81panpzekkGwL/0JbLaYjGY=",
++        "usagesDigest": "tG3p3Nb5XxC7vWY/bcKdb//g0HoAxpxxH3F5/jBVlk4=",
++        "recordedInputs": [
++          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
++          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
++          "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
++          "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
++          "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
++          "REPO_MAPPING:rules_cc+,platforms platforms",
++          "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
++          "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
++          "REPO_MAPPING:rules_rust+,bazel_features bazel_features+",
++          "REPO_MAPPING:rules_rust+,bazel_skylib bazel_skylib+",
++          "REPO_MAPPING:rules_rust+,bazel_tools bazel_tools",
++          "REPO_MAPPING:rules_rust+,cui rules_rust++cu+cui",
++          "REPO_MAPPING:rules_rust+,rrc rules_rust++i2+rrc",
++          "REPO_MAPPING:rules_rust+,rules_cc rules_cc+",
++          "REPO_MAPPING:rules_rust+,rules_rust rules_rust+"
++        ],
++        "generatedRepoSpecs": {
++          "cargo_bazel_bootstrap": {
++            "repoRuleId": "@@rules_rust+//cargo/private:cargo_bootstrap.bzl%cargo_bootstrap_repository",
++            "attributes": {
++              "srcs": [
++                "@@rules_rust+//crate_universe:src/api.rs",
++                "@@rules_rust+//crate_universe:src/api/lockfile.rs",
++                "@@rules_rust+//crate_universe:src/cli.rs",
++                "@@rules_rust+//crate_universe:src/cli/generate.rs",
++                "@@rules_rust+//crate_universe:src/cli/query.rs",
++                "@@rules_rust+//crate_universe:src/cli/render.rs",
++                "@@rules_rust+//crate_universe:src/cli/splice.rs",
++                "@@rules_rust+//crate_universe:src/cli/vendor.rs",
++                "@@rules_rust+//crate_universe:src/config.rs",
++                "@@rules_rust+//crate_universe:src/context.rs",
++                "@@rules_rust+//crate_universe:src/context/crate_context.rs",
++                "@@rules_rust+//crate_universe:src/context/platforms.rs",
++                "@@rules_rust+//crate_universe:src/lib.rs",
++                "@@rules_rust+//crate_universe:src/lockfile.rs",
++                "@@rules_rust+//crate_universe:src/main.rs",
++                "@@rules_rust+//crate_universe:src/metadata.rs",
++                "@@rules_rust+//crate_universe:src/metadata/cargo_bin.rs",
++                "@@rules_rust+//crate_universe:src/metadata/cargo_tree_resolver.rs",
++                "@@rules_rust+//crate_universe:src/metadata/cargo_tree_rustc_wrapper.bat",
++                "@@rules_rust+//crate_universe:src/metadata/cargo_tree_rustc_wrapper.sh",
++                "@@rules_rust+//crate_universe:src/metadata/dependency.rs",
++                "@@rules_rust+//crate_universe:src/metadata/metadata_annotation.rs",
++                "@@rules_rust+//crate_universe:src/rendering.rs",
++                "@@rules_rust+//crate_universe:src/rendering/template_engine.rs",
++                "@@rules_rust+//crate_universe:src/rendering/templates/module_bzl.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/partials/header.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/partials/module/aliases_map.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/partials/module/deps_map.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/partials/module/repo_git.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/partials/module/repo_http.j2",
++                "@@rules_rust+//crate_universe:src/rendering/templates/vendor_module.j2",
++                "@@rules_rust+//crate_universe:src/rendering/verbatim/alias_rules.bzl",
++                "@@rules_rust+//crate_universe:src/select.rs",
++                "@@rules_rust+//crate_universe:src/splicing.rs",
++                "@@rules_rust+//crate_universe:src/splicing/cargo_config.rs",
++                "@@rules_rust+//crate_universe:src/splicing/crate_index_lookup.rs",
++                "@@rules_rust+//crate_universe:src/splicing/splicer.rs",
++                "@@rules_rust+//crate_universe:src/test.rs",
++                "@@rules_rust+//crate_universe:src/utils.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/glob.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/label.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/select.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/select_dict.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/select_list.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/select_scalar.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/select_set.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/serialize.rs",
++                "@@rules_rust+//crate_universe:src/utils/starlark/target_compatible_with.rs",
++                "@@rules_rust+//crate_universe:src/utils/symlink.rs",
++                "@@rules_rust+//crate_universe:src/utils/target_triple.rs"
++              ],
++              "binary": "cargo-bazel",
++              "cargo_lockfile": "@@rules_rust+//crate_universe:Cargo.lock",
++              "cargo_toml": "@@rules_rust+//crate_universe:Cargo.toml",
++              "version": "1.93.1",
++              "timeout": 900,
++              "rust_toolchain_cargo_template": "@rust_host_tools//:bin/{tool}",
++              "rust_toolchain_rustc_template": "@rust_host_tools//:bin/{tool}",
++              "compressed_windows_toolchain_names": false
++            }
++          }
++        },
++        "moduleExtensionMetadata": {
++          "explicitRootModuleDirectDeps": [
++            "cargo_bazel_bootstrap"
++          ],
++          "explicitRootModuleDirectDevDeps": [],
++          "useAllRepos": "NO",
++          "reproducible": false
++        }
++      }
+     }
+   },
+   "facts": {}
+diff --git a/build.rs b/build.rs
+index e7872d52..ba80f916 100644
+--- a/build.rs
++++ b/build.rs
+@@ -13,6 +13,7 @@ fn main() {
+         .cpp(true)
+         .cpp_link_stdlib(None) // linked via link-cplusplus crate
+         .std(cxxbridge_flags::STD)
++        .define("CXX_SHARED_LIB", "1")
+         .warnings_into_errors(cfg!(deny_warnings))
+         .compile("cxxbridge1");
+ 
+@@ -20,6 +21,12 @@ fn main() {
+     println!("cargo:rerun-if-changed=include/cxx.h");
+     println!("cargo:rustc-cfg=built_with_cargo");
+ 
++    // Expose OUT_DIR so dependents can locate libcxxbridge1.a / cxxbridge1.lib
++    // for per-symbol shared library export (consumed as DEP_CXXBRIDGE1_LIB_DIR).
++    if let Ok(out_dir) = env::var("OUT_DIR") {
++        println!("cargo:LIB_DIR={out_dir}");
++    }
++
+     if let Some(manifest_dir) = &manifest_dir_opt {
+         let cxx_h = manifest_dir.join("include").join("cxx.h");
+         println!("cargo:HEADER={}", cxx_h.to_string_lossy());
+diff --git a/cxx-shared-noexport-test/Cargo.toml b/cxx-shared-noexport-test/Cargo.toml
+new file mode 100644
+index 00000000..ce675107
+--- /dev/null
++++ b/cxx-shared-noexport-test/Cargo.toml
+@@ -0,0 +1,14 @@
++[package]
++name = "cxx-shared-noexport-test"
++version = "0.0.0"
++edition = "2021"
++publish = false
++
++[lib]
++crate-type = ["staticlib"]
++
++[dependencies]
++cxx = { path = ".." }
++
++[build-dependencies]
++cxx-build = { path = "../gen/build" }
+diff --git a/cxx-shared-noexport-test/build.rs b/cxx-shared-noexport-test/build.rs
+new file mode 100644
+index 00000000..0996787f
+--- /dev/null
++++ b/cxx-shared-noexport-test/build.rs
+@@ -0,0 +1,17 @@
++fn main() {
++    // Legacy workflow: export_macro is NOT set, so no CXX_API annotations are
++    // emitted on user-defined types.  The caller is responsible for managing
++    // symbol visibility at the DLL boundary.
++    //
++    // CXX_SHARED_LIB marks the cxx runtime trampolines (cxxbridge1$...) as
++    // visibility("default") / __declspec(dllexport).  This is required so they
++    // survive into the final shared library whether the C++ bridge is compiled
++    // by Cargo (as here) or externally by CMake compiling lib.rs.cc.
++    //
++    // On Windows this eliminates the need for a .def file: the trampolines are
++    // exported automatically via __declspec(dllexport) rather than requiring
++    // each mangled symbol name to be listed manually.
++    cxx_build::bridge("src/lib.rs")
++        .std("c++14")
++        .compile("cxx_shared_noexport_test");
++}
+diff --git a/cxx-shared-noexport-test/consumer/main.cc b/cxx-shared-noexport-test/consumer/main.cc
+new file mode 100644
+index 00000000..2aca4746
+--- /dev/null
++++ b/cxx-shared-noexport-test/consumer/main.cc
+@@ -0,0 +1,23 @@
++#include <iostream>
++#include <string>
++
++// No CXX_API annotations — the generated header has plain declarations.
++#include "cxx.h"
++#include "lib.rs.h"
++
++using namespace cxx_noexport_test;
++
++int main() {
++    std::cout << "--- Legacy shared-lib (no-export) test ---" << std::endl;
++
++    rust::Box<Engine> engine = new_engine();
++
++    Point p1{1.0, 2.0};
++    engine->add_point(p1);
++
++    rust::String report = engine->report();
++    std::cout << std::string(report) << std::endl;
++
++    std::cout << "--- Legacy test complete ---" << std::endl;
++    return 0;
++}
+diff --git a/cxx-shared-noexport-test/scripts/build_and_test.py b/cxx-shared-noexport-test/scripts/build_and_test.py
+new file mode 100644
+index 00000000..533d9bc7
+--- /dev/null
++++ b/cxx-shared-noexport-test/scripts/build_and_test.py
+@@ -0,0 +1,100 @@
++#!/usr/bin/env python3
++"""
++Cross-platform build-and-test for cxx-shared-noexport-test (legacy staticlib → shared lib workflow).
++
++Demonstrates that CXX_SHARED_LIB is sufficient to export trampolines without
++export_macro / CXX_API annotations on user-defined types.
++
++On Windows, CXX_SHARED_LIB causes __declspec(dllexport) on all cxxbridge1
++trampolines, replacing the brittle .def-file approach for enumerating mangled
++symbol names.
++
++Run from anywhere; all paths are derived from this script's location.
++"""
++import os
++import platform
++import subprocess
++from pathlib import Path
++
++
++def run(cmd, **kwargs):
++    print("==>", " ".join(str(a) for a in cmd))
++    subprocess.run(cmd, check=True, **kwargs)
++
++
++def main():
++    crate_dir = Path(__file__).resolve().parent.parent
++    repo_root = crate_dir.parent
++    lib_dir = repo_root / "target" / "debug"
++    bridge_inc = repo_root / "target" / "cxxbridge" / "cxx-shared-noexport-test" / "src"
++    rust_inc = repo_root / "target" / "cxxbridge" / "rust"
++    consumer = crate_dir / "consumer" / "main.cc"
++
++    run(["cargo", "build"], cwd=crate_dir)
++
++    os_name = platform.system()
++    if os_name == "Windows":
++        # Link the Rust staticlib into a DLL.  CXX_SHARED_LIB was defined during
++        # the bridge compile step (in build.rs), so trampolines carry
++        # __declspec(dllexport) — no .def file needed.
++        # /WHOLEARCHIVE pulls in Rust runtime symbols with no direct C++ callers.
++        static_lib = lib_dir / "cxx_shared_noexport_test.lib"
++        dll = crate_dir / "cxx_shared_noexport_test.dll"
++        run([
++            "link.exe", "/DLL",
++            f"/WHOLEARCHIVE:{static_lib}",
++            f"/OUT:{dll}",
++        ], cwd=crate_dir)
++
++        import_lib = crate_dir / "cxx_shared_noexport_test.lib"
++        run([
++            "cl.exe", "/EHsc", "/std:c++17", str(consumer),
++            "/DCXX_SHARED",
++            f"/I{bridge_inc}", f"/I{rust_inc}",
++            str(import_lib),
++            f"/Fe:{crate_dir / 'test_app.exe'}",
++        ], cwd=crate_dir)
++        env = os.environ | {"PATH": str(crate_dir) + os.pathsep + os.environ.get("PATH", "")}
++        run([str(crate_dir / "test_app.exe")], env=env)
++
++    elif os_name == "Darwin":
++        shared_lib = crate_dir / "libcxx_shared_noexport_test.dylib"
++        run([
++            "g++", "-dynamiclib",
++            "-Wl,-all_load",
++            str(lib_dir / "libcxx_shared_noexport_test.a"),
++            "-o", str(shared_lib),
++        ], cwd=crate_dir)
++        run([
++            "g++", "-std=c++17", str(consumer),
++            "-DCXX_SHARED",
++            f"-I{bridge_inc}", f"-I{rust_inc}",
++            f"-L{crate_dir}", "-lcxx_shared_noexport_test",
++            f"-Wl,-rpath,{crate_dir}",
++            "-o", str(crate_dir / "test_app"),
++        ], cwd=crate_dir)
++        run([str(crate_dir / "test_app")])
++
++    else:  # Linux
++        shared_lib = crate_dir / "libcxx_shared_noexport_test.so"
++        run([
++            "g++", "-shared",
++            "-Wl,--whole-archive",
++            str(lib_dir / "libcxx_shared_noexport_test.a"),
++            "-Wl,--no-whole-archive",
++            "-lpthread", "-ldl",
++            "-o", str(shared_lib),
++        ], cwd=crate_dir)
++        run([
++            "g++", "-std=c++17", str(consumer),
++            "-DCXX_SHARED",
++            f"-I{bridge_inc}", f"-I{rust_inc}",
++            f"-L{crate_dir}", "-lcxx_shared_noexport_test",
++            f"-Wl,-rpath,{crate_dir}",
++            "-o", str(crate_dir / "test_app"),
++        ], cwd=crate_dir)
++        run([str(crate_dir / "test_app")])
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/cxx-shared-noexport-test/src/lib.rs b/cxx-shared-noexport-test/src/lib.rs
+new file mode 100644
+index 00000000..6a5a08c2
+--- /dev/null
++++ b/cxx-shared-noexport-test/src/lib.rs
+@@ -0,0 +1,35 @@
++#[cxx::bridge(namespace = "cxx_noexport_test")]
++mod ffi {
++    #[derive(Clone)]
++    struct Point {
++        x: f64,
++        y: f64,
++    }
++
++    extern "Rust" {
++        type Engine;
++
++        fn new_engine() -> Box<Engine>;
++        fn add_point(self: &mut Engine, p: Point);
++        fn report(self: &Engine) -> String;
++    }
++}
++
++pub struct Engine {
++    points: Vec<ffi::Point>,
++}
++
++#[must_use] 
++pub fn new_engine() -> Box<Engine> {
++    Box::new(Engine { points: Vec::new() })
++}
++
++impl Engine {
++    fn add_point(&mut self, p: ffi::Point) {
++        self.points.push(p);
++    }
++
++    fn report(&self) -> String {
++        format!("Engine has {} points.", self.points.len())
++    }
++}
+diff --git a/cxx-shared-test/Cargo.toml b/cxx-shared-test/Cargo.toml
+new file mode 100644
+index 00000000..b4665733
+--- /dev/null
++++ b/cxx-shared-test/Cargo.toml
+@@ -0,0 +1,13 @@
++[package]
++name = "cxx-shared-test"
++version = "0.1.0"
++edition = "2021"
++
++[lib]
++crate-type = ["cdylib"]
++
++[dependencies]
++cxx = { path = ".." }
++
++[build-dependencies]
++cxx-build = { path = "../gen/build" }
+diff --git a/cxx-shared-test/build.rs b/cxx-shared-test/build.rs
+new file mode 100644
+index 00000000..a17c95ad
+--- /dev/null
++++ b/cxx-shared-test/build.rs
+@@ -0,0 +1,4 @@
++fn main() {
++    let build = cxx_build::bridge("src/lib.rs").std("c++14").clone();
++    cxx_build::compile_as_shared_lib(build, "cxx_shared_test");
++}
+diff --git a/cxx-shared-test/consumer/main.cc b/cxx-shared-test/consumer/main.cc
+new file mode 100644
+index 00000000..ae1ffc59
+--- /dev/null
++++ b/cxx-shared-test/consumer/main.cc
+@@ -0,0 +1,36 @@
++#include <iostream>
++#include <string>
++
++#include "cxx.h"
++#include "lib.rs.h"
++
++using namespace cxx_shared_test;
++
++int main() {
++    std::cout << "--- Starting DLL test ---" << std::endl;
++
++    // 1. Instantiate a Rust-owned opaque type across the DLL boundary.
++    rust::Box<Engine> engine = new_engine();
++
++    // 2. Create and pass shared structs.
++    Point p1{10.5, 20.0};
++    Point p2{-5.0, 3.14};
++    engine->add_point(p1);
++    engine->add_point(p2);
++
++    // 3. Retrieve a Vec of shared structs.
++    rust::Vec<Point> points = engine->get_points();
++    std::cout << "C++: Retrieved " << points.size() << " points from Rust." << std::endl;
++
++    // 4. Retrieve a String return value.
++    rust::String report = engine->report();
++    std::cout << "C++: " << std::string(report) << std::endl;
++
++    // 5. Round-trip: pass a C++ string slice to Rust and get a String back.
++    rust::Str label = "Production";
++    rust::String labeled = engine->report_with_label(label);
++    std::cout << "C++: " << std::string(labeled) << std::endl;
++
++    std::cout << "--- Test complete ---" << std::endl;
++    return 0;
++}
+diff --git a/cxx-shared-test/main.obj b/cxx-shared-test/main.obj
+new file mode 100644
+index 00000000..74d6a272
+Binary files /dev/null and b/cxx-shared-test/main.obj differ
+diff --git a/cxx-shared-test/scripts/build_and_test.py b/cxx-shared-test/scripts/build_and_test.py
+new file mode 100644
+index 00000000..9bec3b7b
+--- /dev/null
++++ b/cxx-shared-test/scripts/build_and_test.py
+@@ -0,0 +1,78 @@
++#!/usr/bin/env python3
++"""
++Cross-platform build-and-test for cxx-shared-test (bundled cdylib).
++Run from anywhere; all paths are derived from this script's location.
++
++Known issue (macOS): rustc passes -exported_symbols_list to ld64 when
++building a cdylib, restricting exports to Rust-known symbols.  The C++
++bridge wrappers generated by cxx-build are not in that list and are
++therefore suppressed from the dylib's export table even when the archive
++is force-loaded.  This test is expected to fail on macOS until a proper
++fix is found (e.g. augmenting rustc's export list from build.rs).
++"""
++
++import os
++import platform
++import subprocess
++from pathlib import Path
++
++
++def run(cmd, **kwargs):
++    print("==>", " ".join(str(a) for a in cmd))
++    subprocess.run(cmd, check=True, **kwargs)
++
++
++def main():
++    crate_dir = Path(__file__).resolve().parent.parent
++    repo_root = crate_dir.parent
++    lib_dir = repo_root / "target" / "debug"
++    bridge_inc = repo_root / "target" / "cxxbridge" / "cxx-shared-test" / "src"
++    rust_inc = repo_root / "target" / "cxxbridge" / "rust"
++    consumer = crate_dir / "consumer" / "main.cc"
++
++    run(["cargo", "build"], cwd=crate_dir)
++
++    os_name = platform.system()
++    if os_name == "Windows":
++        run(
++            [
++                "cl.exe",
++                "/EHsc",
++                "/std:c++17",
++                str(consumer),
++                "/DCXX_SHARED",
++                "/DCXX_API_SHARED",
++                f"/I{bridge_inc}",
++                f"/I{rust_inc}",
++                str(lib_dir / "cxx_shared_test.dll.lib"),
++                f"/Fe:{crate_dir / 'test_app.exe'}",
++            ],
++            cwd=crate_dir,
++        )
++        env = os.environ | {
++            "PATH": str(lib_dir) + os.pathsep + os.environ.get("PATH", "")
++        }
++        run([str(crate_dir / "test_app.exe")], env=env)
++    else:
++        run(
++            [
++                "g++",
++                "-std=c++17",
++                str(consumer),
++                "-DCXX_SHARED",
++                "-DCXX_API_SHARED",
++                f"-I{bridge_inc}",
++                f"-I{rust_inc}",
++                f"-L{lib_dir}",
++                "-lcxx_shared_test",
++                f"-Wl,-rpath,{lib_dir}",
++                "-o",
++                str(crate_dir / "test_app"),
++            ],
++            cwd=crate_dir,
++        )
++        run([str(crate_dir / "test_app")])
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/cxx-shared-test/src/lib.rs b/cxx-shared-test/src/lib.rs
+new file mode 100644
+index 00000000..a5305b96
+--- /dev/null
++++ b/cxx-shared-test/src/lib.rs
+@@ -0,0 +1,57 @@
++#[cxx::bridge(namespace = "cxx_shared_test")]
++mod ffi {
++    // A shared struct — data layout matches exactly in both C++ and Rust.
++    #[derive(Clone)]
++    struct Point {
++        x: f64,
++        y: f64,
++    }
++
++    // An opaque Rust type: C++ holds a Box<Engine> but Rust owns the memory.
++    extern "Rust" {
++        type Engine;
++
++        fn new_engine() -> Box<Engine>;
++        fn add_point(self: &mut Engine, p: Point);
++        fn get_points(self: &Engine) -> Vec<Point>;
++        fn report(self: &Engine) -> String;
++
++        // Round-trip: C++ passes a label string, Rust returns a tagged report.
++        fn report_with_label(self: &Engine, label: &str) -> String;
++    }
++}
++
++pub struct Engine {
++    points: Vec<ffi::Point>,
++}
++
++#[must_use] 
++pub fn new_engine() -> Box<Engine> {
++    Box::new(Engine { points: Vec::new() })
++}
++
++impl Engine {
++    fn add_point(&mut self, p: ffi::Point) {
++        println!("Rust: Added point ({}, {})", p.x, p.y);
++        self.points.push(p);
++    }
++
++    fn get_points(&self) -> Vec<ffi::Point> {
++        self.points.clone()
++    }
++
++    fn report(&self) -> String {
++        format!(
++            "Engine successfully processed {} points.",
++            self.points.len()
++        )
++    }
++
++    fn report_with_label(&self, label: &str) -> String {
++        format!(
++            "[{}] Engine has {} points.",
++            label,
++            self.points.len()
++        )
++    }
++}
+diff --git a/cxx-shared-test/test_app.exe b/cxx-shared-test/test_app.exe
+new file mode 100644
+index 00000000..4805d28b
+Binary files /dev/null and b/cxx-shared-test/test_app.exe differ
+diff --git a/cxx-static-test/Cargo.toml b/cxx-static-test/Cargo.toml
+new file mode 100644
+index 00000000..53b8976a
+--- /dev/null
++++ b/cxx-static-test/Cargo.toml
+@@ -0,0 +1,14 @@
++[package]
++name = "cxx-static-test"
++version = "0.0.0"
++edition = "2021"
++publish = false
++
++[lib]
++crate-type = ["staticlib"]
++
++[dependencies]
++cxx = { path = ".." }
++
++[build-dependencies]
++cxx-build = { path = "../gen/build" }
+diff --git a/cxx-static-test/build.rs b/cxx-static-test/build.rs
+new file mode 100644
+index 00000000..fdfaa9c2
+--- /dev/null
++++ b/cxx-static-test/build.rs
+@@ -0,0 +1,7 @@
++fn main() {
++    // Intentionally do NOT set CFG.export_macro — the static-lib workflow
++    // never needs dllexport/visibility annotations on the generated headers.
++    cxx_build::bridge("src/lib.rs")
++        .std("c++14")
++        .compile("cxx_static_test");
++}
+diff --git a/cxx-static-test/consumer/main.cc b/cxx-static-test/consumer/main.cc
+new file mode 100644
+index 00000000..89ded4f0
+--- /dev/null
++++ b/cxx-static-test/consumer/main.cc
+@@ -0,0 +1,28 @@
++#include <iostream>
++#include <string>
++
++// No CXX_API_SHARED needed — linking the static archive directly.
++#include "cxx.h"
++#include "lib.rs.h"
++
++using namespace cxx_static_test;
++
++int main() {
++    std::cout << "--- Static library test ---" << std::endl;
++
++    rust::Box<Engine> engine = new_engine();
++
++    Point p1{1.0, 2.0};
++    Point p2{3.0, 4.0};
++    engine->add_point(p1);
++    engine->add_point(p2);
++
++    rust::Vec<Point> points = engine->get_points();
++    std::cout << "Retrieved " << points.size() << " points." << std::endl;
++
++    rust::String report = engine->report();
++    std::cout << std::string(report) << std::endl;
++
++    std::cout << "--- Static library test complete ---" << std::endl;
++    return 0;
++}
+diff --git a/cxx-static-test/scripts/build_and_test.py b/cxx-static-test/scripts/build_and_test.py
+new file mode 100644
+index 00000000..20de3700
+--- /dev/null
++++ b/cxx-static-test/scripts/build_and_test.py
+@@ -0,0 +1,51 @@
++#!/usr/bin/env python3
++"""
++Cross-platform build-and-test for cxx-static-test (staticlib linked directly into exe).
++Run from anywhere; all paths are derived from this script's location.
++"""
++import platform
++import subprocess
++from pathlib import Path
++
++
++def run(cmd, **kwargs):
++    print("==>", " ".join(str(a) for a in cmd))
++    subprocess.run(cmd, check=True, **kwargs)
++
++
++def main():
++    crate_dir = Path(__file__).resolve().parent.parent
++    repo_root = crate_dir.parent
++    lib_dir = repo_root / "target" / "debug"
++    bridge_inc = repo_root / "target" / "cxxbridge" / "cxx-static-test" / "src"
++    rust_inc = repo_root / "target" / "cxxbridge" / "rust"
++    consumer = crate_dir / "consumer" / "main.cc"
++
++    run(["cargo", "build"], cwd=crate_dir)
++
++    os_name = platform.system()
++    if os_name == "Windows":
++        # MSVC links the static lib directly into the exe.
++        # Rust std pulls in several Windows system libs that MSVC won't
++        # add automatically; list them explicitly here.
++        run([
++            "cl.exe", "/EHsc", "/std:c++17", "/MD", str(consumer),
++            f"/I{bridge_inc}", f"/I{rust_inc}",
++            str(lib_dir / "cxx_static_test.lib"),
++            "ntdll.lib", "ws2_32.lib", "userenv.lib", "bcrypt.lib",
++            f"/Fe:{crate_dir / 'test_app.exe'}",
++        ], cwd=crate_dir)
++        run([str(crate_dir / "test_app.exe")])
++    else:
++        run([
++            "g++", "-std=c++17", str(consumer),
++            f"-I{bridge_inc}", f"-I{rust_inc}",
++            f"-L{lib_dir}", "-lcxx_static_test",
++            "-lpthread", "-ldl",
++            "-o", str(crate_dir / "test_app"),
++        ], cwd=crate_dir)
++        run([str(crate_dir / "test_app")])
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/cxx-static-test/src/lib.rs b/cxx-static-test/src/lib.rs
+new file mode 100644
+index 00000000..5ed0a89f
+--- /dev/null
++++ b/cxx-static-test/src/lib.rs
+@@ -0,0 +1,40 @@
++#[cxx::bridge(namespace = "cxx_static_test")]
++mod ffi {
++    #[derive(Clone)]
++    struct Point {
++        x: f64,
++        y: f64,
++    }
++
++    extern "Rust" {
++        type Engine;
++
++        fn new_engine() -> Box<Engine>;
++        fn add_point(self: &mut Engine, p: Point);
++        fn get_points(self: &Engine) -> Vec<Point>;
++        fn report(self: &Engine) -> String;
++    }
++}
++
++pub struct Engine {
++    points: Vec<ffi::Point>,
++}
++
++#[must_use] 
++pub fn new_engine() -> Box<Engine> {
++    Box::new(Engine { points: Vec::new() })
++}
++
++impl Engine {
++    fn add_point(&mut self, p: ffi::Point) {
++        self.points.push(p);
++    }
++
++    fn get_points(&self) -> Vec<ffi::Point> {
++        self.points.clone()
++    }
++
++    fn report(&self) -> String {
++        format!("Engine has {} points.", self.points.len())
++    }
++}
+diff --git a/gen/build/Cargo.toml b/gen/build/Cargo.toml
+index d2809066..177277e8 100644
+--- a/gen/build/Cargo.toml
++++ b/gen/build/Cargo.toml
+@@ -18,6 +18,7 @@ parallel = ["cc/parallel"]
+ 
+ [dependencies]
+ cc = "1.0.101"
++object = { version = "0.36", default-features = false, features = ["archive", "read", "std"] }
+ codespan-reporting = "0.13.1"
+ indexmap = "2.9.0"
+ proc-macro2 = { version = "1.0.74", default-features = false, features = ["span-locations"] }
+diff --git a/gen/build/src/cfg.rs b/gen/build/src/cfg.rs
+index 16329793..bea63952 100644
+--- a/gen/build/src/cfg.rs
++++ b/gen/build/src/cfg.rs
+@@ -237,8 +237,6 @@ pub struct Cfg<'a> {
+ ///
+ /// <p style="margin:0"><br><br></p>
+ ///
+-/// <div style="float:right;margin:22px 50px 0;font-size:1.15em;opacity:.73"><strong>bool</strong></div>
+-///
+ /// ## **`CFG.doxygen`**
+ ///
+ /// Boolean. Whether to propagate Rust documentation from inside the cxx::bridge
+diff --git a/gen/build/src/lib.rs b/gen/build/src/lib.rs
+index 88694a9a..808ead1f 100644
+--- a/gen/build/src/lib.rs
++++ b/gen/build/src/lib.rs
+@@ -87,6 +87,7 @@ mod gen;
+ mod intern;
+ mod out;
+ mod paths;
++mod symbols;
+ mod syntax;
+ mod target;
+ mod vec;
+@@ -139,6 +140,82 @@ pub fn bridges(rust_source_files: impl IntoIterator<Item = impl AsRef<Path>>) ->
+     })
+ }
+ 
++/// Compile a cxx bridge as a shared library (`cdylib`), handling all
++/// platform-specific symbol export logic internally.
++///
++/// This is a drop-in replacement for calling `.compile(name)` directly when
++/// the crate type is `cdylib`.  It suppresses cc's default cargo link
++/// metadata, re-emits it with `+whole-archive` to force C++ bridge objects
++/// into the shared library, and emits the appropriate per-symbol or
++/// version-script linker arguments for the current platform — all in pure
++/// Rust, with no external tools or committed artifact files.
++///
++/// # Example
++///
++/// ```no_run
++/// // build.rs
++/// fn main() {
++///     let build = cxx_build::bridge("src/lib.rs");
++///     cxx_build::compile_as_shared_lib(build, "mylib");
++/// }
++/// ```
++pub fn compile_as_shared_lib(mut build: Build, name: &str) {
++    build.cargo_metadata(false);
++    build.compile(name);
++    emit_shared_lib_args(name);
++}
++
++fn emit_shared_lib_args(name: &str) {
++    let out_dir = env::var("OUT_DIR").unwrap();
++    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
++    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++
++    // Force all C++ bridge objects (which Rust never calls directly) into the output.
++    println!("cargo::rustc-link-search=native={out_dir}");
++    println!("cargo::rustc-link-lib=static:+whole-archive={name}");
++
++    if target_os == "windows" && target_env == "msvc" {
++        let bridge_lib = PathBuf::from(&out_dir).join(format!("{name}.lib"));
++        for sym in symbols::extract_symbols(&bridge_lib, name) {
++            println!("cargo::rustc-link-arg=/EXPORT:{sym}");
++        }
++        if let Ok(cxxbridge_dir) = env::var("DEP_CXXBRIDGE1_LIB_DIR") {
++            let cxxbridge_lib = PathBuf::from(cxxbridge_dir).join("cxxbridge1.lib");
++            for sym in symbols::extract_symbols(&cxxbridge_lib, "cxxbridge1") {
++                println!("cargo::rustc-link-arg=/EXPORT:{sym}");
++            }
++        }
++    } else if target_os == "macos" {
++        let lib_name = format!("lib{name}.dylib");
++        println!("cargo::rustc-link-arg=-Wl,-install_name,@rpath/{lib_name}");
++
++        let bridge_lib = PathBuf::from(&out_dir).join(format!("lib{name}.a"));
++        for sym in symbols::extract_symbols(&bridge_lib, name) {
++            println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{sym}");
++        }
++        if let Ok(cxxbridge_dir) = env::var("DEP_CXXBRIDGE1_LIB_DIR") {
++            let cxxbridge_lib = PathBuf::from(cxxbridge_dir).join("libcxxbridge1.a");
++            for sym in symbols::extract_symbols(&cxxbridge_lib, "rust10cxxbridge1") {
++                println!("cargo::rustc-link-arg=-Wl,-exported_symbol,{sym}");
++            }
++        }
++    } else {
++        // GNU ld: version script with glob patterns — no per-symbol extraction needed.
++        let map_path = PathBuf::from(&out_dir).join("export.map");
++        std::fs::write(
++            &map_path,
++            format!(
++                "{{\n  global:\n    *{name}*;\n    *rust10cxxbridge1*;\n    cxxbridge1*;\n  local:\n    *;\n}};\n"
++            ),
++        )
++        .expect("failed to write export.map");
++        println!(
++            "cargo::rustc-link-arg=-Wl,--version-script={}",
++            map_path.display()
++        );
++    }
++}
++
+ struct Project {
+     include_prefix: PathBuf,
+     manifest_dir: PathBuf,
+diff --git a/gen/build/src/symbols.rs b/gen/build/src/symbols.rs
+new file mode 100644
+index 00000000..e3602cb6
+--- /dev/null
++++ b/gen/build/src/symbols.rs
+@@ -0,0 +1,46 @@
++use std::path::Path;
++
++use object::read::archive::ArchiveFile;
++use object::{Object, ObjectSymbol, SymbolScope};
++
++/// Extract globally-visible, defined symbol names from a static archive whose
++/// mangled name contains `pattern`.  Returns a sorted, deduplicated list.
++pub(crate) fn extract_symbols(lib_path: &Path, pattern: &str) -> Vec<String> {
++    let Ok(data) = std::fs::read(lib_path) else {
++        return Vec::new();
++    };
++
++    let Ok(archive) = ArchiveFile::parse(data.as_slice()) else {
++        return Vec::new();
++    };
++
++    let mut symbols = Vec::new();
++
++    for member in archive.members().flatten() {
++        let Ok(obj_data) = member.data(data.as_slice()) else {
++            continue;
++        };
++        let Ok(obj) = object::File::parse(obj_data) else {
++            continue;
++        };
++        for sym in obj.symbols() {
++            if sym.is_undefined() {
++                continue;
++            }
++            // Keep symbols visible at dynamic link time or to the static
++            // linkage unit (covers both ELF/Mach-O global and COFF public).
++            if !matches!(sym.scope(), SymbolScope::Dynamic | SymbolScope::Linkage) {
++                continue;
++            }
++            if let Ok(name) = sym.name() {
++                if name.contains(pattern) {
++                    symbols.push(name.to_owned());
++                }
++            }
++        }
++    }
++
++    symbols.sort_unstable();
++    symbols.dedup();
++    symbols
++}
+diff --git a/gen/src/include.rs b/gen/src/include.rs
+index 71bb201d..05d74d16 100644
+--- a/gen/src/include.rs
++++ b/gen/src/include.rs
+@@ -62,6 +62,39 @@ impl<'a> Includes<'a> {
+     }
+ }
+ 
++fn write_export_macro_definition(
++    out: &mut Content,
++    macro_name: &str,
++    exporting_flag: &str,
++    shared_flag: &str,
++) {
++    writeln!(out, "#ifndef {}", macro_name);
++    writeln!(out, "#if defined(_WIN32) || defined(__CYGWIN__)");
++    writeln!(out, "#if defined({})", exporting_flag);
++    writeln!(out, "#define {} __declspec(dllexport)", macro_name);
++    writeln!(out, "#elif defined({})", shared_flag);
++    writeln!(out, "#define {} __declspec(dllimport)", macro_name);
++    writeln!(out, "#else");
++    writeln!(out, "#define {}", macro_name);
++    writeln!(out, "#endif");
++    writeln!(out, "#else");
++    writeln!(
++        out,
++        "#if defined({}) || defined({})",
++        exporting_flag, shared_flag
++    );
++    writeln!(
++        out,
++        "#define {} __attribute__((visibility(\"default\")))",
++        macro_name
++    );
++    writeln!(out, "#else");
++    writeln!(out, "#define {}", macro_name);
++    writeln!(out, "#endif");
++    writeln!(out, "#endif");
++    writeln!(out, "#endif\n");
++}
++
+ pub(super) fn write(out: &mut OutFile) {
+     let header = out.header;
+     let include = &mut out.include;
+@@ -72,6 +105,10 @@ pub(super) fn write(out: &mut OutFile) {
+         writeln!(out, "#pragma once");
+     }
+ 
++    // CXX_RUNTIME_API is always emitted because the inlined cxx.h content uses
++    // it on rust::String, rust::Str, rust::Error, and rust::Opaque.
++    write_export_macro_definition(out, "CXX_RUNTIME_API", "CXX_SHARED_LIB", "CXX_SHARED");
++
+     for include in &include.custom {
+         match include.kind {
+             IncludeKind::Quoted => {
+diff --git a/gen/src/write.rs b/gen/src/write.rs
+index 283258fa..f140c753 100644
+--- a/gen/src/write.rs
++++ b/gen/src/write.rs
+@@ -402,11 +402,9 @@ fn write_opaque_type<'a>(out: &mut OutFile<'a>, ety: &'a ExternType, methods: &[
+     write_doc(out, "", &ety.doc);
+ 
+     out.builtin.opaque = true;
+-    writeln!(
+-        out,
+-        "struct {} final : public ::rust::Opaque {{",
+-        ety.name.cxx,
+-    );
++
++    write!(out, "struct ");
++    writeln!(out, "{} final : public ::rust::Opaque {{", ety.name.cxx);
+ 
+     for (i, method) in methods.iter().enumerate() {
+         if i > 0 && !method.doc.is_empty() {
+@@ -844,6 +842,14 @@ fn begin_function_definition(out: &mut OutFile) {
+     }
+ }
+ 
++/// Like `begin_function_definition` but omits the export macro.
++/// Used for methods, which inherit visibility from their containing struct declaration.
++fn begin_method_definition(out: &mut OutFile) {
++    if let Some(annotation) = &out.opt.cxx_impl_annotations {
++        write!(out, "{} ", annotation);
++    }
++}
++
+ fn write_cxx_function_shim<'a>(out: &mut OutFile<'a>, efn: &'a ExternFn) {
+     out.pragma.dollar_in_identifier = true;
+     out.pragma.missing_declarations = true;
+@@ -1146,7 +1152,13 @@ fn write_rust_function_shim_decl(
+     indirect_call: bool,
+     main: bool,
+ ) {
+-    begin_function_definition(out);
++    // Free functions are exported directly; methods inherit visibility from their struct.
++    if matches!(sig.kind, FnKind::Free) {
++        begin_function_definition(out);
++    } else {
++        begin_method_definition(out);
++    }
++
+     if matches!(sig.kind, FnKind::Assoc(_)) && in_class {
+         write!(out, "static ");
+     }
+diff --git a/include/cxx.h b/include/cxx.h
+index 4e261a35..49630a47 100644
+--- a/include/cxx.h
++++ b/include/cxx.h
+@@ -1,4 +1,32 @@
+ #pragma once
++
++// CXX_RUNTIME_API controls visibility of the cxx runtime types (rust::String,
++// rust::Str, rust::Error, rust::Opaque) and their extern "C" trampolines.
++//
++// When building a bundled cdylib, set CXX_SHARED_LIB=1 in your build.rs.
++// When consuming such a cdylib, compile with -DCXX_SHARED.
++//
++// This is intentionally separate from any user-chosen export macro (e.g.
++// MY_ENGINE_API) so that multiple Rust cdylibs can coexist in the same C++
++// project without their runtime-visibility macros colliding.
++#ifndef CXX_RUNTIME_API
++#if defined(_WIN32) || defined(__CYGWIN__)
++  #if defined(CXX_SHARED_LIB)
++    #define CXX_RUNTIME_API __declspec(dllexport)
++  #elif defined(CXX_SHARED)
++    #define CXX_RUNTIME_API __declspec(dllimport)
++  #else
++    #define CXX_RUNTIME_API
++  #endif
++#else
++  #if defined(CXX_SHARED_LIB) || defined(CXX_SHARED)
++    #define CXX_RUNTIME_API __attribute__((visibility("default")))
++  #else
++    #define CXX_RUNTIME_API
++  #endif
++#endif
++#endif
++
+ #include <algorithm>
+ #include <array>
+ #include <cassert>
+@@ -41,7 +69,7 @@ class impl;
+ #ifndef CXXBRIDGE1_RUST_STRING
+ #define CXXBRIDGE1_RUST_STRING
+ // https://cxx.rs/binding/string.html
+-class String final {
++class CXX_RUNTIME_API String final {
+ public:
+   String() noexcept;
+   String(const String &) noexcept;
+@@ -117,7 +145,7 @@ private:
+ #ifndef CXXBRIDGE1_RUST_STR
+ #define CXXBRIDGE1_RUST_STR
+ // https://cxx.rs/binding/str.html
+-class Str final {
++class CXX_RUNTIME_API Str final {
+ public:
+   Str() noexcept;
+   Str(const String &) noexcept;
+@@ -421,7 +449,7 @@ private:
+ #ifndef CXXBRIDGE1_RUST_ERROR
+ #define CXXBRIDGE1_RUST_ERROR
+ // https://cxx.rs/binding/result.html
+-class Error final : public std::exception {
++class CXX_RUNTIME_API Error final : public std::exception {
+ public:
+   Error(const Error &);
+   Error(Error &&) noexcept;
+@@ -455,7 +483,7 @@ std::ostream &operator<<(std::ostream &, const Str &);
+ #ifndef CXXBRIDGE1_RUST_OPAQUE
+ #define CXXBRIDGE1_RUST_OPAQUE
+ // Base class of generated opaque Rust types.
+-class Opaque {
++class CXX_RUNTIME_API Opaque {
+ public:
+   Opaque() = delete;
+   Opaque(const Opaque &) = delete;
+diff --git a/src/cxx.cc b/src/cxx.cc
+index 6ce5d0bb..c2d3bba7 100644
+--- a/src/cxx.cc
++++ b/src/cxx.cc
+@@ -31,70 +31,70 @@
+ #endif
+ 
+ extern "C" {
+-void cxxbridge1$cxx_string$init(std::string *s, const std::uint8_t *ptr,
++CXX_RUNTIME_API void cxxbridge1$cxx_string$init(std::string *s, const std::uint8_t *ptr,
+                                 std::size_t len) noexcept {
+   new (s) std::string(reinterpret_cast<const char *>(ptr), len);
+ }
+ 
+-void cxxbridge1$cxx_string$destroy(std::string *s) noexcept {
++CXX_RUNTIME_API void cxxbridge1$cxx_string$destroy(std::string *s) noexcept {
+   using std::string;
+   s->~string();
+ }
+ 
+-const char *cxxbridge1$cxx_string$data(const std::string &s) noexcept {
++CXX_RUNTIME_API const char *cxxbridge1$cxx_string$data(const std::string &s) noexcept {
+   return s.data();
+ }
+ 
+-std::size_t cxxbridge1$cxx_string$length(const std::string &s) noexcept {
++CXX_RUNTIME_API std::size_t cxxbridge1$cxx_string$length(const std::string &s) noexcept {
+   return s.length();
+ }
+ 
+-void cxxbridge1$cxx_string$clear(std::string &s) noexcept { s.clear(); }
++CXX_RUNTIME_API void cxxbridge1$cxx_string$clear(std::string &s) noexcept { s.clear(); }
+ 
+-void cxxbridge1$cxx_string$reserve_total(std::string &s,
++CXX_RUNTIME_API void cxxbridge1$cxx_string$reserve_total(std::string &s,
+                                          size_t new_cap) noexcept {
+   s.reserve(new_cap);
+ }
+ 
+-void cxxbridge1$cxx_string$push(std::string &s, const std::uint8_t *ptr,
++CXX_RUNTIME_API void cxxbridge1$cxx_string$push(std::string &s, const std::uint8_t *ptr,
+                                 std::size_t len) noexcept {
+   s.append(reinterpret_cast<const char *>(ptr), len);
+ }
+ 
+ // rust::String
+-void cxxbridge1$string$new(rust::String *self) noexcept;
+-void cxxbridge1$string$clone(rust::String *self,
++CXX_RUNTIME_API void cxxbridge1$string$new(rust::String *self) noexcept;
++CXX_RUNTIME_API void cxxbridge1$string$clone(rust::String *self,
+                              const rust::String &other) noexcept;
+-bool cxxbridge1$string$from_utf8(rust::String *self, const char *ptr,
++CXX_RUNTIME_API bool cxxbridge1$string$from_utf8(rust::String *self, const char *ptr,
+                                  std::size_t len) noexcept;
+-void cxxbridge1$string$from_utf8_lossy(rust::String *self, const char *ptr,
++CXX_RUNTIME_API void cxxbridge1$string$from_utf8_lossy(rust::String *self, const char *ptr,
+                                        std::size_t len) noexcept;
+-bool cxxbridge1$string$from_utf16(rust::String *self, const char16_t *ptr,
++CXX_RUNTIME_API bool cxxbridge1$string$from_utf16(rust::String *self, const char16_t *ptr,
+                                   std::size_t len) noexcept;
+-void cxxbridge1$string$from_utf16_lossy(rust::String *self, const char16_t *ptr,
++CXX_RUNTIME_API void cxxbridge1$string$from_utf16_lossy(rust::String *self, const char16_t *ptr,
+                                         std::size_t len) noexcept;
+-void cxxbridge1$string$drop(rust::String *self) noexcept;
+-const char *cxxbridge1$string$ptr(const rust::String *self) noexcept;
+-std::size_t cxxbridge1$string$len(const rust::String *self) noexcept;
+-std::size_t cxxbridge1$string$capacity(const rust::String *self) noexcept;
+-void cxxbridge1$string$reserve_additional(rust::String *self,
++CXX_RUNTIME_API void cxxbridge1$string$drop(rust::String *self) noexcept;
++CXX_RUNTIME_API const char *cxxbridge1$string$ptr(const rust::String *self) noexcept;
++CXX_RUNTIME_API std::size_t cxxbridge1$string$len(const rust::String *self) noexcept;
++CXX_RUNTIME_API std::size_t cxxbridge1$string$capacity(const rust::String *self) noexcept;
++CXX_RUNTIME_API void cxxbridge1$string$reserve_additional(rust::String *self,
+                                           size_t additional) noexcept;
+-void cxxbridge1$string$reserve_total(rust::String *self,
++CXX_RUNTIME_API void cxxbridge1$string$reserve_total(rust::String *self,
+                                      size_t new_cap) noexcept;
+ 
+ // rust::Str
+-void cxxbridge1$str$new(rust::Str *self) noexcept;
+-void cxxbridge1$str$ref(rust::Str *self, const rust::String *string) noexcept;
+-bool cxxbridge1$str$from(rust::Str *self, const char *ptr,
++CXX_RUNTIME_API void cxxbridge1$str$new(rust::Str *self) noexcept;
++CXX_RUNTIME_API void cxxbridge1$str$ref(rust::Str *self, const rust::String *string) noexcept;
++CXX_RUNTIME_API bool cxxbridge1$str$from(rust::Str *self, const char *ptr,
+                          std::size_t len) noexcept;
+-const char *cxxbridge1$str$ptr(const rust::Str *self) noexcept;
+-std::size_t cxxbridge1$str$len(const rust::Str *self) noexcept;
++CXX_RUNTIME_API const char *cxxbridge1$str$ptr(const rust::Str *self) noexcept;
++CXX_RUNTIME_API std::size_t cxxbridge1$str$len(const rust::Str *self) noexcept;
+ 
+ // rust::Slice
+-void cxxbridge1$slice$new(void *self, const void *ptr,
++CXX_RUNTIME_API void cxxbridge1$slice$new(void *self, const void *ptr,
+                           std::size_t len) noexcept;
+-void *cxxbridge1$slice$ptr(const void *self) noexcept;
+-std::size_t cxxbridge1$slice$len(const void *self) noexcept;
++CXX_RUNTIME_API void *cxxbridge1$slice$ptr(const void *self) noexcept;
++CXX_RUNTIME_API std::size_t cxxbridge1$slice$len(const void *self) noexcept;
+ } // extern "C"
+ 
+ namespace rust {
+@@ -510,7 +510,7 @@ static const char *errorCopy(const char *ptr, std::size_t len) {
+ }
+ 
+ extern "C" {
+-const char *cxxbridge1$error(const char *ptr, std::size_t len) noexcept {
++CXX_RUNTIME_API const char *cxxbridge1$error(const char *ptr, std::size_t len) noexcept {
+   return errorCopy(ptr, len);
+ }
+ } // extern "C"
+@@ -570,7 +570,7 @@ struct PtrLen final {
+ } // namespace repr
+ 
+ extern "C" {
+-repr::PtrLen cxxbridge1$exception(const char *, std::size_t len) noexcept;
++CXX_RUNTIME_API repr::PtrLen cxxbridge1$exception(const char *, std::size_t len) noexcept;
+ }
+ 
+ namespace detail {
+@@ -621,23 +621,23 @@ void destroy(T *ptr) {
+ } // namespace
+ 
+ extern "C" {
+-void cxxbridge1$unique_ptr$std$string$null(
++CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$string$null(
+     std::unique_ptr<std::string> *ptr) noexcept {
+   new (ptr) std::unique_ptr<std::string>();
+ }
+-void cxxbridge1$unique_ptr$std$string$raw(std::unique_ptr<std::string> *ptr,
++CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$string$raw(std::unique_ptr<std::string> *ptr,
+                                           std::string *raw) noexcept {
+   new (ptr) std::unique_ptr<std::string>(raw);
+ }
+-const std::string *cxxbridge1$unique_ptr$std$string$get(
++CXX_RUNTIME_API const std::string *cxxbridge1$unique_ptr$std$string$get(
+     const std::unique_ptr<std::string> &ptr) noexcept {
+   return ptr.get();
+ }
+-std::string *cxxbridge1$unique_ptr$std$string$release(
++CXX_RUNTIME_API std::string *cxxbridge1$unique_ptr$std$string$release(
+     std::unique_ptr<std::string> &ptr) noexcept {
+   return ptr.release();
+ }
+-void cxxbridge1$unique_ptr$std$string$drop(
++CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$string$drop(
+     std::unique_ptr<std::string> *ptr) noexcept {
+   ptr->~unique_ptr();
+ }
+@@ -652,77 +652,77 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
+ } // namespace
+ 
+ #define STD_VECTOR_OPS(RUST_TYPE, CXX_TYPE)                                    \
+-  std::vector<CXX_TYPE> *cxxbridge1$std$vector$##RUST_TYPE##$new() noexcept {  \
++  CXX_RUNTIME_API std::vector<CXX_TYPE> *cxxbridge1$std$vector$##RUST_TYPE##$new() noexcept {  \
+     return new std::vector<CXX_TYPE>();                                        \
+   }                                                                            \
+-  std::size_t cxxbridge1$std$vector$##RUST_TYPE##$size(                        \
++  CXX_RUNTIME_API std::size_t cxxbridge1$std$vector$##RUST_TYPE##$size(                        \
+       const std::vector<CXX_TYPE> &s) noexcept {                               \
+     return s.size();                                                           \
+   }                                                                            \
+-  std::size_t cxxbridge1$std$vector$##RUST_TYPE##$capacity(                    \
++  CXX_RUNTIME_API std::size_t cxxbridge1$std$vector$##RUST_TYPE##$capacity(                    \
+       const std::vector<CXX_TYPE> &s) noexcept {                               \
+     return s.capacity();                                                       \
+   }                                                                            \
+-  CXX_TYPE *cxxbridge1$std$vector$##RUST_TYPE##$get_unchecked(                 \
++  CXX_RUNTIME_API CXX_TYPE *cxxbridge1$std$vector$##RUST_TYPE##$get_unchecked(                 \
+       std::vector<CXX_TYPE> *s, std::size_t pos) noexcept {                    \
+     return &(*s)[pos];                                                         \
+   }                                                                            \
+-  void cxxbridge1$std$vector$##RUST_TYPE##$reserve(                            \
++  CXX_RUNTIME_API void cxxbridge1$std$vector$##RUST_TYPE##$reserve(                            \
+       std::vector<CXX_TYPE> *s, std::size_t new_cap) noexcept {                \
+     s->reserve(new_cap);                                                       \
+   }                                                                            \
+-  void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$null(                    \
++  CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$null(                    \
+       std::unique_ptr<std::vector<CXX_TYPE>> *ptr) noexcept {                  \
+     new (ptr) std::unique_ptr<std::vector<CXX_TYPE>>();                        \
+   }                                                                            \
+-  void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$raw(                     \
++  CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$raw(                     \
+       std::unique_ptr<std::vector<CXX_TYPE>> *ptr,                             \
+       std::vector<CXX_TYPE> *raw) noexcept {                                   \
+     new (ptr) std::unique_ptr<std::vector<CXX_TYPE>>(raw);                     \
+   }                                                                            \
+-  const std::vector<CXX_TYPE>                                                  \
++  CXX_RUNTIME_API const std::vector<CXX_TYPE>                                                  \
+       *cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$get(                     \
+           const std::unique_ptr<std::vector<CXX_TYPE>> &ptr) noexcept {        \
+     return ptr.get();                                                          \
+   }                                                                            \
+-  std::vector<CXX_TYPE>                                                        \
++  CXX_RUNTIME_API std::vector<CXX_TYPE>                                                        \
+       *cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$release(                 \
+           std::unique_ptr<std::vector<CXX_TYPE>> &ptr) noexcept {              \
+     return ptr.release();                                                      \
+   }                                                                            \
+-  void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$drop(                    \
++  CXX_RUNTIME_API void cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$drop(                    \
+       std::unique_ptr<std::vector<CXX_TYPE>> *ptr) noexcept {                  \
+     ptr->~unique_ptr();                                                        \
+   }
+ 
+ #define STD_VECTOR_TRIVIAL_OPS(RUST_TYPE, CXX_TYPE)                            \
+-  void cxxbridge1$std$vector$##RUST_TYPE##$push_back(                          \
++  CXX_RUNTIME_API void cxxbridge1$std$vector$##RUST_TYPE##$push_back(                          \
+       std::vector<CXX_TYPE> *v, CXX_TYPE *value) noexcept {                    \
+     v->push_back(std::move(*value));                                           \
+     destroy(value);                                                            \
+   }                                                                            \
+-  void cxxbridge1$std$vector$##RUST_TYPE##$pop_back(std::vector<CXX_TYPE> *v,  \
++  CXX_RUNTIME_API void cxxbridge1$std$vector$##RUST_TYPE##$pop_back(std::vector<CXX_TYPE> *v,  \
+                                                     CXX_TYPE *out) noexcept {  \
+     new (out) CXX_TYPE(std::move(v->back()));                                  \
+     v->pop_back();                                                             \
+   }
+ 
+ #define RUST_VEC_EXTERNS(RUST_TYPE, CXX_TYPE)                                  \
+-  void cxxbridge1$rust_vec$##RUST_TYPE##$new(                                  \
++  CXX_RUNTIME_API void cxxbridge1$rust_vec$##RUST_TYPE##$new(                                  \
+       rust::Vec<CXX_TYPE> *ptr) noexcept;                                      \
+-  void cxxbridge1$rust_vec$##RUST_TYPE##$drop(                                 \
++  CXX_RUNTIME_API void cxxbridge1$rust_vec$##RUST_TYPE##$drop(                                 \
+       rust::Vec<CXX_TYPE> *ptr) noexcept;                                      \
+-  std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$len(                           \
++  CXX_RUNTIME_API std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$len(                           \
+       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
+-  std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$capacity(                      \
++  CXX_RUNTIME_API std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$capacity(                      \
+       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
+-  const CXX_TYPE *cxxbridge1$rust_vec$##RUST_TYPE##$data(                      \
++  CXX_RUNTIME_API const CXX_TYPE *cxxbridge1$rust_vec$##RUST_TYPE##$data(                      \
+       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
+-  void cxxbridge1$rust_vec$##RUST_TYPE##$reserve_total(                        \
++  CXX_RUNTIME_API void cxxbridge1$rust_vec$##RUST_TYPE##$reserve_total(                        \
+       rust::Vec<CXX_TYPE> *ptr, std::size_t new_cap) noexcept;                 \
+-  void cxxbridge1$rust_vec$##RUST_TYPE##$set_len(rust::Vec<CXX_TYPE> *ptr,     \
++  CXX_RUNTIME_API void cxxbridge1$rust_vec$##RUST_TYPE##$set_len(rust::Vec<CXX_TYPE> *ptr,     \
+                                                  std::size_t len) noexcept;    \
+-  void cxxbridge1$rust_vec$##RUST_TYPE##$truncate(rust::Vec<CXX_TYPE> *ptr,    \
++  CXX_RUNTIME_API void cxxbridge1$rust_vec$##RUST_TYPE##$truncate(rust::Vec<CXX_TYPE> *ptr,    \
+                                                   std::size_t len) noexcept;
+ 
+ #define RUST_VEC_OPS(RUST_TYPE, CXX_TYPE)                                      \
+@@ -762,56 +762,56 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
+ #define SHARED_PTR_OPS(RUST_TYPE, CXX_TYPE)                                    \
+   static_assert(sizeof(std::shared_ptr<CXX_TYPE>) == 2 * sizeof(void *), "");  \
+   static_assert(alignof(std::shared_ptr<CXX_TYPE>) == alignof(void *), "");    \
+-  void cxxbridge1$std$shared_ptr$##RUST_TYPE##$null(                           \
++  CXX_RUNTIME_API void cxxbridge1$std$shared_ptr$##RUST_TYPE##$null(                           \
+       std::shared_ptr<CXX_TYPE> *ptr) noexcept {                               \
+     new (ptr) std::shared_ptr<CXX_TYPE>();                                     \
+   }                                                                            \
+-  void cxxbridge1$std$shared_ptr$##RUST_TYPE##$raw(                            \
++  CXX_RUNTIME_API void cxxbridge1$std$shared_ptr$##RUST_TYPE##$raw(                            \
+       std::shared_ptr<CXX_TYPE> *ptr, CXX_TYPE *raw) noexcept {                \
+     new (ptr) std::shared_ptr<CXX_TYPE>(raw);                                  \
+   }                                                                            \
+-  CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$uninit(                    \
++  CXX_RUNTIME_API CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$uninit(                    \
+       std::shared_ptr<CXX_TYPE> *ptr) noexcept {                               \
+     CXX_TYPE *uninit =                                                         \
+         reinterpret_cast<CXX_TYPE *>(new rust::MaybeUninit<CXX_TYPE>);         \
+     new (ptr) std::shared_ptr<CXX_TYPE>(uninit);                               \
+     return uninit;                                                             \
+   }                                                                            \
+-  void cxxbridge1$std$shared_ptr$##RUST_TYPE##$clone(                          \
++  CXX_RUNTIME_API void cxxbridge1$std$shared_ptr$##RUST_TYPE##$clone(                          \
+       const std::shared_ptr<CXX_TYPE> &self,                                   \
+       std::shared_ptr<CXX_TYPE> *ptr) noexcept {                               \
+     new (ptr) std::shared_ptr<CXX_TYPE>(self);                                 \
+   }                                                                            \
+-  const CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$get(                 \
++  CXX_RUNTIME_API const CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$get(                 \
+       const std::shared_ptr<CXX_TYPE> &self) noexcept {                        \
+     return self.get();                                                         \
+   }                                                                            \
+-  void cxxbridge1$std$shared_ptr$##RUST_TYPE##$drop(                           \
++  CXX_RUNTIME_API void cxxbridge1$std$shared_ptr$##RUST_TYPE##$drop(                           \
+       const std::shared_ptr<CXX_TYPE> *self) noexcept {                        \
+     self->~shared_ptr();                                                       \
+   }                                                                            \
+   static_assert(sizeof(std::weak_ptr<CXX_TYPE>) == 2 * sizeof(void *), "");    \
+   static_assert(alignof(std::weak_ptr<CXX_TYPE>) == alignof(void *), "");      \
+-  void cxxbridge1$std$weak_ptr$##RUST_TYPE##$null(                             \
++  CXX_RUNTIME_API void cxxbridge1$std$weak_ptr$##RUST_TYPE##$null(                             \
+       std::weak_ptr<CXX_TYPE> *ptr) noexcept {                                 \
+     new (ptr) std::weak_ptr<CXX_TYPE>();                                       \
+   }                                                                            \
+-  void cxxbridge1$std$weak_ptr$##RUST_TYPE##$clone(                            \
++  CXX_RUNTIME_API void cxxbridge1$std$weak_ptr$##RUST_TYPE##$clone(                            \
+       const std::weak_ptr<CXX_TYPE> &self,                                     \
+       std::weak_ptr<CXX_TYPE> *ptr) noexcept {                                 \
+     new (ptr) std::weak_ptr<CXX_TYPE>(self);                                   \
+   }                                                                            \
+-  void cxxbridge1$std$weak_ptr$##RUST_TYPE##$downgrade(                        \
++  CXX_RUNTIME_API void cxxbridge1$std$weak_ptr$##RUST_TYPE##$downgrade(                        \
+       const std::shared_ptr<CXX_TYPE> &shared,                                 \
+       std::weak_ptr<CXX_TYPE> *weak) noexcept {                                \
+     new (weak) std::weak_ptr<CXX_TYPE>(shared);                                \
+   }                                                                            \
+-  void cxxbridge1$std$weak_ptr$##RUST_TYPE##$upgrade(                          \
++  CXX_RUNTIME_API void cxxbridge1$std$weak_ptr$##RUST_TYPE##$upgrade(                          \
+       const std::weak_ptr<CXX_TYPE> &weak,                                     \
+       std::shared_ptr<CXX_TYPE> *shared) noexcept {                            \
+     new (shared) std::shared_ptr<CXX_TYPE>(weak.lock());                       \
+   }                                                                            \
+-  void cxxbridge1$std$weak_ptr$##RUST_TYPE##$drop(                             \
++  CXX_RUNTIME_API void cxxbridge1$std$weak_ptr$##RUST_TYPE##$drop(                             \
+       const std::weak_ptr<CXX_TYPE> *self) noexcept {                          \
+     self->~weak_ptr();                                                         \
+   }
+diff --git a/third-party/BUCK b/third-party/BUCK
+index d83f89a4..270863b5 100644
+--- a/third-party/BUCK
++++ b/third-party/BUCK
+@@ -12,7 +12,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "anstyle-1.0.13",
++    name = "anstyle-1",
+     srcs = [":anstyle-1.0.13.crate"],
+     crate = "anstyle",
+     crate_root = "anstyle-1.0.13.crate/src/lib.rs",
+@@ -26,7 +26,7 @@ cargo.rust_library(
+ 
+ alias(
+     name = "cc",
+-    actual = ":cc-1.2.53",
++    actual = ":cc-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -39,21 +39,21 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "cc-1.2.53",
++    name = "cc-1",
+     srcs = [":cc-1.2.53.crate"],
+     crate = "cc",
+     crate_root = "cc-1.2.53.crate/src/lib.rs",
+     edition = "2018",
+     visibility = [],
+     deps = [
+-        ":find-msvc-tools-0.1.8",
+-        ":shlex-1.3.0",
++        ":find-msvc-tools-0.1",
++        ":shlex-1",
+     ],
+ )
+ 
+ alias(
+     name = "clap",
+-    actual = ":clap-4.5.54",
++    actual = ":clap-4",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -66,7 +66,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "clap-4.5.54",
++    name = "clap-4",
+     srcs = [":clap-4.5.54.crate"],
+     crate = "clap",
+     crate_root = "clap-4.5.54.crate/src/lib.rs",
+@@ -78,7 +78,7 @@ cargo.rust_library(
+         "usage",
+     ],
+     visibility = [],
+-    deps = [":clap_builder-4.5.54"],
++    deps = [":clap_builder-4"],
+ )
+ 
+ http_archive(
+@@ -90,7 +90,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "clap_builder-4.5.54",
++    name = "clap_builder-4",
+     srcs = [":clap_builder-4.5.54.crate"],
+     crate = "clap_builder",
+     crate_root = "clap_builder-4.5.54.crate/src/lib.rs",
+@@ -103,8 +103,8 @@ cargo.rust_library(
+     ],
+     visibility = [],
+     deps = [
+-        ":anstyle-1.0.13",
+-        ":clap_lex-0.7.7",
++        ":anstyle-1",
++        ":clap_lex-0.7",
+     ],
+ )
+ 
+@@ -117,7 +117,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "clap_lex-0.7.7",
++    name = "clap_lex-0.7",
+     srcs = [":clap_lex-0.7.7.crate"],
+     crate = "clap_lex",
+     crate_root = "clap_lex-0.7.7.crate/src/lib.rs",
+@@ -127,7 +127,7 @@ cargo.rust_library(
+ 
+ alias(
+     name = "codespan-reporting",
+-    actual = ":codespan-reporting-0.13.1",
++    actual = ":codespan-reporting-0.13",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -140,7 +140,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "codespan-reporting-0.13.1",
++    name = "codespan-reporting-0.13",
+     srcs = [":codespan-reporting-0.13.1.crate"],
+     crate = "codespan_reporting",
+     crate_root = "codespan-reporting-0.13.1.crate/src/lib.rs",
+@@ -152,8 +152,8 @@ cargo.rust_library(
+     ],
+     visibility = [],
+     deps = [
+-        ":termcolor-1.4.1",
+-        ":unicode-width-0.2.2",
++        ":termcolor-1",
++        ":unicode-width-0.2",
+     ],
+ )
+ 
+@@ -166,7 +166,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "equivalent-1.0.2",
++    name = "equivalent-1",
+     srcs = [":equivalent-1.0.2.crate"],
+     crate = "equivalent",
+     crate_root = "equivalent-1.0.2.crate/src/lib.rs",
+@@ -183,7 +183,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "find-msvc-tools-0.1.8",
++    name = "find-msvc-tools-0.1",
+     srcs = [":find-msvc-tools-0.1.8.crate"],
+     crate = "find_msvc_tools",
+     crate_root = "find-msvc-tools-0.1.8.crate/src/lib.rs",
+@@ -193,7 +193,7 @@ cargo.rust_library(
+ 
+ alias(
+     name = "foldhash",
+-    actual = ":foldhash-0.2.0",
++    actual = ":foldhash-0.2",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -206,7 +206,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "foldhash-0.2.0",
++    name = "foldhash-0.2",
+     srcs = [":foldhash-0.2.0.crate"],
+     crate = "foldhash",
+     crate_root = "foldhash-0.2.0.crate/src/lib.rs",
+@@ -227,7 +227,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "hashbrown-0.16.1",
++    name = "hashbrown-0.16",
+     srcs = [":hashbrown-0.16.1.crate"],
+     crate = "hashbrown",
+     crate_root = "hashbrown-0.16.1.crate/src/lib.rs",
+@@ -237,7 +237,7 @@ cargo.rust_library(
+ 
+ alias(
+     name = "indexmap",
+-    actual = ":indexmap-2.13.0",
++    actual = ":indexmap-2",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -250,7 +250,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "indexmap-2.13.0",
++    name = "indexmap-2",
+     srcs = [":indexmap-2.13.0.crate"],
+     crate = "indexmap",
+     crate_root = "indexmap-2.13.0.crate/src/lib.rs",
+@@ -261,14 +261,14 @@ cargo.rust_library(
+     ],
+     visibility = [],
+     deps = [
+-        ":equivalent-1.0.2",
+-        ":hashbrown-0.16.1",
++        ":equivalent-1",
++        ":hashbrown-0.16",
+     ],
+ )
+ 
+ alias(
+     name = "proc-macro2",
+-    actual = ":proc-macro2-1.0.105",
++    actual = ":proc-macro2-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -281,26 +281,26 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "proc-macro2-1.0.105",
++    name = "proc-macro2-1",
+     srcs = [":proc-macro2-1.0.105.crate"],
+     crate = "proc_macro2",
+     crate_root = "proc-macro2-1.0.105.crate/src/lib.rs",
+     edition = "2021",
+     env = {
+-        "OUT_DIR": "$(location :proc-macro2-1.0.105-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :proc-macro2-1-build-script-run[out_dir])",
+     },
+     features = [
+         "default",
+         "proc-macro",
+         "span-locations",
+     ],
+-    rustc_flags = ["@$(location :proc-macro2-1.0.105-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :proc-macro2-1-build-script-run[rustc_flags])"],
+     visibility = [],
+-    deps = [":unicode-ident-1.0.22"],
++    deps = [":unicode-ident-1"],
+ )
+ 
+ cargo.rust_binary(
+-    name = "proc-macro2-1.0.105-build-script-build",
++    name = "proc-macro2-1-build-script-build",
+     srcs = [":proc-macro2-1.0.105.crate"],
+     crate = "build_script_build",
+     crate_root = "proc-macro2-1.0.105.crate/build.rs",
+@@ -314,9 +314,9 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "proc-macro2-1.0.105-build-script-run",
++    name = "proc-macro2-1-build-script-run",
+     package_name = "proc-macro2",
+-    buildscript_rule = ":proc-macro2-1.0.105-build-script-build",
++    buildscript_rule = ":proc-macro2-1-build-script-build",
+     features = [
+         "default",
+         "proc-macro",
+@@ -327,7 +327,7 @@ buildscript_run(
+ 
+ alias(
+     name = "quote",
+-    actual = ":quote-1.0.43",
++    actual = ":quote-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -340,25 +340,25 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "quote-1.0.43",
++    name = "quote-1",
+     srcs = [":quote-1.0.43.crate"],
+     crate = "quote",
+     crate_root = "quote-1.0.43.crate/src/lib.rs",
+     edition = "2021",
+     env = {
+-        "OUT_DIR": "$(location :quote-1.0.43-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :quote-1-build-script-run[out_dir])",
+     },
+     features = [
+         "default",
+         "proc-macro",
+     ],
+-    rustc_flags = ["@$(location :quote-1.0.43-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :quote-1-build-script-run[rustc_flags])"],
+     visibility = [],
+-    deps = [":proc-macro2-1.0.105"],
++    deps = [":proc-macro2-1"],
+ )
+ 
+ cargo.rust_binary(
+-    name = "quote-1.0.43-build-script-build",
++    name = "quote-1-build-script-build",
+     srcs = [":quote-1.0.43.crate"],
+     crate = "build_script_build",
+     crate_root = "quote-1.0.43.crate/build.rs",
+@@ -371,9 +371,9 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "quote-1.0.43-build-script-run",
++    name = "quote-1-build-script-run",
+     package_name = "quote",
+-    buildscript_rule = ":quote-1.0.43-build-script-build",
++    buildscript_rule = ":quote-1-build-script-build",
+     features = [
+         "default",
+         "proc-macro",
+@@ -383,7 +383,7 @@ buildscript_run(
+ 
+ alias(
+     name = "rustversion",
+-    actual = ":rustversion-1.0.22",
++    actual = ":rustversion-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -396,21 +396,21 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "rustversion-1.0.22",
++    name = "rustversion-1",
+     srcs = [":rustversion-1.0.22.crate"],
+     crate = "rustversion",
+     crate_root = "rustversion-1.0.22.crate/src/lib.rs",
+     edition = "2018",
+     env = {
+-        "OUT_DIR": "$(location :rustversion-1.0.22-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :rustversion-1-build-script-run[out_dir])",
+     },
+     proc_macro = True,
+-    rustc_flags = ["@$(location :rustversion-1.0.22-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :rustversion-1-build-script-run[rustc_flags])"],
+     visibility = [],
+ )
+ 
+ cargo.rust_binary(
+-    name = "rustversion-1.0.22-build-script-build",
++    name = "rustversion-1-build-script-build",
+     srcs = [":rustversion-1.0.22.crate"],
+     crate = "build_script_build",
+     crate_root = "rustversion-1.0.22.crate/build/build.rs",
+@@ -419,15 +419,15 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "rustversion-1.0.22-build-script-run",
++    name = "rustversion-1-build-script-run",
+     package_name = "rustversion",
+-    buildscript_rule = ":rustversion-1.0.22-build-script-build",
++    buildscript_rule = ":rustversion-1-build-script-build",
+     version = "1.0.22",
+ )
+ 
+ alias(
+     name = "scratch",
+-    actual = ":scratch-1.0.9",
++    actual = ":scratch-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -440,20 +440,20 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "scratch-1.0.9",
++    name = "scratch-1",
+     srcs = [":scratch-1.0.9.crate"],
+     crate = "scratch",
+     crate_root = "scratch-1.0.9.crate/src/lib.rs",
+     edition = "2015",
+     env = {
+-        "OUT_DIR": "$(location :scratch-1.0.9-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :scratch-1-build-script-run[out_dir])",
+     },
+-    rustc_flags = ["@$(location :scratch-1.0.9-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :scratch-1-build-script-run[rustc_flags])"],
+     visibility = [],
+ )
+ 
+ cargo.rust_binary(
+-    name = "scratch-1.0.9-build-script-build",
++    name = "scratch-1-build-script-build",
+     srcs = [":scratch-1.0.9.crate"],
+     crate = "build_script_build",
+     crate_root = "scratch-1.0.9.crate/build.rs",
+@@ -462,15 +462,15 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "scratch-1.0.9-build-script-run",
++    name = "scratch-1-build-script-run",
+     package_name = "scratch",
+-    buildscript_rule = ":scratch-1.0.9-build-script-build",
++    buildscript_rule = ":scratch-1-build-script-build",
+     version = "1.0.9",
+ )
+ 
+ alias(
+     name = "serde",
+-    actual = ":serde-1.0.228",
++    actual = ":serde-1",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -483,14 +483,14 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "serde-1.0.228",
++    name = "serde-1",
+     srcs = [":serde-1.0.228.crate"],
+     crate = "serde",
+     crate_root = "serde-1.0.228.crate/src/lib.rs",
+     edition = "2021",
+     env = {
+         "CARGO_PKG_VERSION_PATCH": "228",
+-        "OUT_DIR": "$(location :serde-1.0.228-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :serde-1-build-script-run[out_dir])",
+     },
+     features = [
+         "default",
+@@ -498,16 +498,16 @@ cargo.rust_library(
+         "serde_derive",
+         "std",
+     ],
+-    rustc_flags = ["@$(location :serde-1.0.228-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :serde-1-build-script-run[rustc_flags])"],
+     visibility = [],
+     deps = [
+-        ":serde_core-1.0.228",
+-        ":serde_derive-1.0.228",
++        ":serde_core-1",
++        ":serde_derive-1",
+     ],
+ )
+ 
+ cargo.rust_binary(
+-    name = "serde-1.0.228-build-script-build",
++    name = "serde-1-build-script-build",
+     srcs = [":serde-1.0.228.crate"],
+     crate = "build_script_build",
+     crate_root = "serde-1.0.228.crate/build.rs",
+@@ -525,9 +525,9 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "serde-1.0.228-build-script-run",
++    name = "serde-1-build-script-run",
+     package_name = "serde",
+-    buildscript_rule = ":serde-1.0.228-build-script-build",
++    buildscript_rule = ":serde-1-build-script-build",
+     env = {
+         "CARGO_PKG_VERSION_PATCH": "228",
+     },
+@@ -549,25 +549,25 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "serde_core-1.0.228",
++    name = "serde_core-1",
+     srcs = [":serde_core-1.0.228.crate"],
+     crate = "serde_core",
+     crate_root = "serde_core-1.0.228.crate/src/lib.rs",
+     edition = "2021",
+     env = {
+         "CARGO_PKG_VERSION_PATCH": "228",
+-        "OUT_DIR": "$(location :serde_core-1.0.228-build-script-run[out_dir])",
++        "OUT_DIR": "$(location :serde_core-1-build-script-run[out_dir])",
+     },
+     features = [
+         "result",
+         "std",
+     ],
+-    rustc_flags = ["@$(location :serde_core-1.0.228-build-script-run[rustc_flags])"],
++    rustc_flags = ["@$(location :serde_core-1-build-script-run[rustc_flags])"],
+     visibility = [],
+ )
+ 
+ cargo.rust_binary(
+-    name = "serde_core-1.0.228-build-script-build",
++    name = "serde_core-1-build-script-build",
+     srcs = [":serde_core-1.0.228.crate"],
+     crate = "build_script_build",
+     crate_root = "serde_core-1.0.228.crate/build.rs",
+@@ -583,9 +583,9 @@ cargo.rust_binary(
+ )
+ 
+ buildscript_run(
+-    name = "serde_core-1.0.228-build-script-run",
++    name = "serde_core-1-build-script-run",
+     package_name = "serde_core",
+-    buildscript_rule = ":serde_core-1.0.228-build-script-build",
++    buildscript_rule = ":serde_core-1-build-script-build",
+     env = {
+         "CARGO_PKG_VERSION_PATCH": "228",
+     },
+@@ -605,7 +605,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "serde_derive-1.0.228",
++    name = "serde_derive-1",
+     srcs = [":serde_derive-1.0.228.crate"],
+     crate = "serde_derive",
+     crate_root = "serde_derive-1.0.228.crate/src/lib.rs",
+@@ -617,9 +617,9 @@ cargo.rust_library(
+     proc_macro = True,
+     visibility = [],
+     deps = [
+-        ":proc-macro2-1.0.105",
+-        ":quote-1.0.43",
+-        ":syn-2.0.114",
++        ":proc-macro2-1",
++        ":quote-1",
++        ":syn-2",
+     ],
+ )
+ 
+@@ -632,7 +632,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "shlex-1.3.0",
++    name = "shlex-1",
+     srcs = [":shlex-1.3.0.crate"],
+     crate = "shlex",
+     crate_root = "shlex-1.3.0.crate/src/lib.rs",
+@@ -646,7 +646,7 @@ cargo.rust_library(
+ 
+ alias(
+     name = "syn",
+-    actual = ":syn-2.0.114",
++    actual = ":syn-2",
+     visibility = ["PUBLIC"],
+ )
+ 
+@@ -659,7 +659,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "syn-2.0.114",
++    name = "syn-2",
+     srcs = [":syn-2.0.114.crate"],
+     crate = "syn",
+     crate_root = "syn-2.0.114.crate/src/lib.rs",
+@@ -675,9 +675,9 @@ cargo.rust_library(
+     ],
+     visibility = [],
+     deps = [
+-        ":proc-macro2-1.0.105",
+-        ":quote-1.0.43",
+-        ":unicode-ident-1.0.22",
++        ":proc-macro2-1",
++        ":quote-1",
++        ":unicode-ident-1",
+     ],
+ )
+ 
+@@ -690,17 +690,17 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "termcolor-1.4.1",
++    name = "termcolor-1",
+     srcs = [":termcolor-1.4.1.crate"],
+     crate = "termcolor",
+     crate_root = "termcolor-1.4.1.crate/src/lib.rs",
+     edition = "2018",
+     platform = {
+         "windows-gnu": dict(
+-            deps = [":winapi-util-0.1.11"],
++            deps = [":winapi-util-0.1"],
+         ),
+         "windows-msvc": dict(
+-            deps = [":winapi-util-0.1.11"],
++            deps = [":winapi-util-0.1"],
+         ),
+     },
+     visibility = [],
+@@ -715,7 +715,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "unicode-ident-1.0.22",
++    name = "unicode-ident-1",
+     srcs = [":unicode-ident-1.0.22.crate"],
+     crate = "unicode_ident",
+     crate_root = "unicode-ident-1.0.22.crate/src/lib.rs",
+@@ -732,7 +732,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "unicode-width-0.2.2",
++    name = "unicode-width-0.2",
+     srcs = [":unicode-width-0.2.2.crate"],
+     crate = "unicode_width",
+     crate_root = "unicode-width-0.2.2.crate/src/lib.rs",
+@@ -753,14 +753,14 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "winapi-util-0.1.11",
++    name = "winapi-util-0.1",
+     srcs = [":winapi-util-0.1.11.crate"],
+     crate = "winapi_util",
+     crate_root = "winapi-util-0.1.11.crate/src/lib.rs",
+     edition = "2021",
+     target_compatible_with = ["prelude//os:windows"],
+     visibility = [],
+-    deps = [":windows-sys-0.61.2"],
++    deps = [":windows-sys-0.61"],
+ )
+ 
+ http_archive(
+@@ -772,7 +772,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "windows-link-0.2.1",
++    name = "windows-link-0.2",
+     srcs = [":windows-link-0.2.1.crate"],
+     crate = "windows_link",
+     crate_root = "windows-link-0.2.1.crate/src/lib.rs",
+@@ -789,7 +789,7 @@ http_archive(
+ )
+ 
+ cargo.rust_library(
+-    name = "windows-sys-0.61.2",
++    name = "windows-sys-0.61",
+     srcs = [":windows-sys-0.61.2.crate"],
+     crate = "windows_sys",
+     crate_root = "windows-sys-0.61.2.crate/src/lib.rs",
+@@ -806,5 +806,5 @@ cargo.rust_library(
+     ],
+     target_compatible_with = ["prelude//os:windows"],
+     visibility = [],
+-    deps = [":windows-link-0.2.1"],
++    deps = [":windows-link-0.2"],
+ )
