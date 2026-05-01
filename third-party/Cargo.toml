@@ -8,10 +8,20 @@ rust-version = "1.85"
 
 [dependencies]
 cc = "1.0.101"
-clap = { version = "4", default-features = false, features = ["error-context", "help", "std", "usage"] }
+clap = { version = "4", default-features = false, features = [
+    "error-context",
+    "help",
+    "std",
+    "usage",
+] }
 codespan-reporting = "0.13.1"
 foldhash = "0.2"
 indexmap = "2.9.0"
+object = { version = "0.39", default-features = false, features = [
+    "archive",
+    "read",
+    "std",
+] }
 proc-macro2 = { version = "1.0.58", features = ["span-locations"] }
 quote = "1.0.4"
 rustversion = "1"

@@ -83,6 +83,7 @@ rust_library(
         "@crates.io//:cc",
         "@crates.io//:codespan-reporting",
         "@crates.io//:indexmap",
+        "@crates.io//:object",
         "@crates.io//:proc-macro2",
         "@crates.io//:quote",
         "@crates.io//:scratch",

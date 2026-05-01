@@ -222,7 +222,7 @@ jobs:
       - name: Create demo.html for demo.js
         run: echo '<!DOCTYPE html><script src="demo.js"></script>' > target/wasm32-unknown-emscripten/release/demo.html
       - name: Install firefox
-        run: where firefox || sudo snap install firefox || sudo apt-get install -y firefox
+        run: where firefox || sudo apt-get install -y firefox
       - run: emrun target/wasm32-unknown-emscripten/release/demo.html
           --browser=/snap/firefox/current/usr/lib/firefox/firefox
           --browser_args=-headless

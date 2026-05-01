@@ -18,13 +18,24 @@ parallel = ["cc/parallel"]
 
 [dependencies]
 cc = "1.0.101"
-object = { version = "0.36", default-features = false, features = ["archive", "read", "std"] }
+object = { version = "0.39", default-features = false, features = [
+    "archive",
+    "read",
+    "std",
+] }
 codespan-reporting = "0.13.1"
 indexmap = "2.9.0"
-proc-macro2 = { version = "1.0.74", default-features = false, features = ["span-locations"] }
+proc-macro2 = { version = "1.0.74", default-features = false, features = [
+    "span-locations",
+] }
 quote = { version = "1.0.35", default-features = false }
 scratch = "1.0.5"
-syn = { version = "2.0.46", default-features = false, features = ["clone-impls", "full", "parsing", "printing"] }
+syn = { version = "2.0.46", default-features = false, features = [
+    "clone-impls",
+    "full",
+    "parsing",
+    "printing",
+] }
 
 [dev-dependencies]
 cxx = { version = "1.0", path = "../.." }

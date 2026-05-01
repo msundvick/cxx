@@ -266,6 +266,62 @@ cargo.rust_library(
     ],
 )
 
+http_archive(
+    name = "memchr-2.8.0.crate",
+    sha256 = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79",
+    strip_prefix = "memchr-2.8.0",
+    urls = ["https://static.crates.io/crates/memchr/2.8.0/download"],
+    visibility = [],
+)
+
+cargo.rust_library(
+    name = "memchr-2",
+    srcs = [":memchr-2.8.0.crate"],
+    crate = "memchr",
+    crate_root = "memchr-2.8.0.crate/src/lib.rs",
+    edition = "2021",
+    features = [
+        "alloc",
+        "std",
+    ],
+    visibility = [],
+)
+
+alias(
+    name = "object",
+    actual = ":object-0.39",
+    visibility = ["PUBLIC"],
+)
+
+http_archive(
+    name = "object-0.39.1.crate",
+    sha256 = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b",
+    strip_prefix = "object-0.39.1",
+    urls = ["https://static.crates.io/crates/object/0.39.1/download"],
+    visibility = [],
+)
+
+cargo.rust_library(
+    name = "object-0.39",
+    srcs = [":object-0.39.1.crate"],
+    crate = "object",
+    crate_root = "object-0.39.1.crate/src/lib.rs",
+    edition = "2018",
+    features = [
+        "archive",
+        "coff",
+        "elf",
+        "macho",
+        "pe",
+        "read",
+        "read_core",
+        "std",
+        "xcoff",
+    ],
+    visibility = [],
+    deps = [":memchr-2"],
+)
+
 alias(
     name = "proc-macro2",
     actual = ":proc-macro2-1",
