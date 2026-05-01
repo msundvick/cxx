@@ -842,14 +842,6 @@ fn begin_function_definition(out: &mut OutFile) {
     }
 }
 
-/// Like `begin_function_definition` but omits the export macro.
-/// Used for methods, which inherit visibility from their containing struct declaration.
-fn begin_method_definition(out: &mut OutFile) {
-    if let Some(annotation) = &out.opt.cxx_impl_annotations {
-        write!(out, "{} ", annotation);
-    }
-}
-
 fn write_cxx_function_shim<'a>(out: &mut OutFile<'a>, efn: &'a ExternFn) {
     out.pragma.dollar_in_identifier = true;
     out.pragma.missing_declarations = true;
@@ -1152,12 +1144,7 @@ fn write_rust_function_shim_decl(
     indirect_call: bool,
     main: bool,
 ) {
-    // Free functions are exported directly; methods inherit visibility from their struct.
-    if matches!(sig.kind, FnKind::Free) {
-        begin_function_definition(out);
-    } else {
-        begin_method_definition(out);
-    }
+    begin_function_definition(out);
 
     if matches!(sig.kind, FnKind::Assoc(_)) && in_class {
         write!(out, "static ");

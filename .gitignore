@@ -15,4 +15,6 @@
 *.so
 *.dylib
 *.o
+*.obj
 test_app
+test_app.exe
