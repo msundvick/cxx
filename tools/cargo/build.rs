@@ -52,9 +52,6 @@ fn main() {
     println!("cargo:rustc-cfg=check_cfg");
     println!("cargo:rustc-check-cfg=cfg(check_cfg)");
 
-    println!("cargo:rustc-link-arg-cdylib=-Wl,--export-dynamic-symbol=cxxbridge1*");
-    println!("cargo:rustc-link-arg-cdylib=-Wl,--export-dynamic-symbol=my_namespace$cxxbridge1*");
-
     if Path::new("src/syntax/mod.rs").exists() {
         return;
     }

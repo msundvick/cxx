@@ -31,7 +31,7 @@
 #endif
 
 extern "C" {
-CXX_API CXX_API void cxxbridge1$cxx_string$init(std::string *s, const std::uint8_t *ptr,
+CXX_API void cxxbridge1$cxx_string$init(std::string *s, const std::uint8_t *ptr,
                                 std::size_t len) noexcept {
   new (s) std::string(reinterpret_cast<const char *>(ptr), len);
 }
@@ -65,18 +65,18 @@ CXX_API void cxxbridge1$cxx_string$push(std::string &s, const std::uint8_t *ptr,
 CXX_API void cxxbridge1$string$new(rust::String *self) noexcept;
 CXX_API void cxxbridge1$string$clone(rust::String *self,
                              const rust::String &other) noexcept;
-bool cxxbridge1$string$from_utf8(rust::String *self, const char *ptr,
+CXX_API bool cxxbridge1$string$from_utf8(rust::String *self, const char *ptr,
                                  std::size_t len) noexcept;
 CXX_API void cxxbridge1$string$from_utf8_lossy(rust::String *self, const char *ptr,
                                        std::size_t len) noexcept;
-bool cxxbridge1$string$from_utf16(rust::String *self, const char16_t *ptr,
+CXX_API bool cxxbridge1$string$from_utf16(rust::String *self, const char16_t *ptr,
                                   std::size_t len) noexcept;
 CXX_API void cxxbridge1$string$from_utf16_lossy(rust::String *self, const char16_t *ptr,
                                         std::size_t len) noexcept;
 CXX_API void cxxbridge1$string$drop(rust::String *self) noexcept;
-const char *cxxbridge1$string$ptr(const rust::String *self) noexcept;
-std::size_t cxxbridge1$string$len(const rust::String *self) noexcept;
-std::size_t cxxbridge1$string$capacity(const rust::String *self) noexcept;
+CXX_API const char *cxxbridge1$string$ptr(const rust::String *self) noexcept;
+CXX_API std::size_t cxxbridge1$string$len(const rust::String *self) noexcept;
+CXX_API std::size_t cxxbridge1$string$capacity(const rust::String *self) noexcept;
 CXX_API void cxxbridge1$string$reserve_additional(rust::String *self,
                                           size_t additional) noexcept;
 CXX_API void cxxbridge1$string$reserve_total(rust::String *self,
@@ -510,7 +510,7 @@ static const char *errorCopy(const char *ptr, std::size_t len) {
 }
 
 extern "C" {
-const char *cxxbridge1$error(const char *ptr, std::size_t len) noexcept {
+CXX_API const char *cxxbridge1$error(const char *ptr, std::size_t len) noexcept {
   return errorCopy(ptr, len);
 }
 } // extern "C"
@@ -570,7 +570,7 @@ struct PtrLen final {
 } // namespace repr
 
 extern "C" {
-repr::PtrLen cxxbridge1$exception(const char *, std::size_t len) noexcept;
+CXX_API repr::PtrLen cxxbridge1$exception(const char *, std::size_t len) noexcept;
 }
 
 namespace detail {
@@ -629,11 +629,11 @@ CXX_API void cxxbridge1$unique_ptr$std$string$raw(std::unique_ptr<std::string> *
                                           std::string *raw) noexcept {
   new (ptr) std::unique_ptr<std::string>(raw);
 }
-const std::string *cxxbridge1$unique_ptr$std$string$get(
+CXX_API const std::string *cxxbridge1$unique_ptr$std$string$get(
     const std::unique_ptr<std::string> &ptr) noexcept {
   return ptr.get();
 }
-std::string *cxxbridge1$unique_ptr$std$string$release(
+CXX_API std::string *cxxbridge1$unique_ptr$std$string$release(
     std::unique_ptr<std::string> &ptr) noexcept {
   return ptr.release();
 }
@@ -652,18 +652,18 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
 } // namespace
 
 #define STD_VECTOR_OPS(RUST_TYPE, CXX_TYPE)                                    \
-  std::vector<CXX_TYPE> *cxxbridge1$std$vector$##RUST_TYPE##$new() noexcept {  \
+  CXX_API std::vector<CXX_TYPE> *cxxbridge1$std$vector$##RUST_TYPE##$new() noexcept {  \
     return new std::vector<CXX_TYPE>();                                        \
   }                                                                            \
-  std::size_t cxxbridge1$std$vector$##RUST_TYPE##$size(                        \
+  CXX_API std::size_t cxxbridge1$std$vector$##RUST_TYPE##$size(                        \
       const std::vector<CXX_TYPE> &s) noexcept {                               \
     return s.size();                                                           \
   }                                                                            \
-  std::size_t cxxbridge1$std$vector$##RUST_TYPE##$capacity(                    \
+  CXX_API std::size_t cxxbridge1$std$vector$##RUST_TYPE##$capacity(                    \
       const std::vector<CXX_TYPE> &s) noexcept {                               \
     return s.capacity();                                                       \
   }                                                                            \
-  CXX_TYPE *cxxbridge1$std$vector$##RUST_TYPE##$get_unchecked(                 \
+  CXX_API CXX_TYPE *cxxbridge1$std$vector$##RUST_TYPE##$get_unchecked(                 \
       std::vector<CXX_TYPE> *s, std::size_t pos) noexcept {                    \
     return &(*s)[pos];                                                         \
   }                                                                            \
@@ -680,12 +680,12 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
       std::vector<CXX_TYPE> *raw) noexcept {                                   \
     new (ptr) std::unique_ptr<std::vector<CXX_TYPE>>(raw);                     \
   }                                                                            \
-  const std::vector<CXX_TYPE>                                                  \
+  CXX_API const std::vector<CXX_TYPE>                                                  \
       *cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$get(                     \
           const std::unique_ptr<std::vector<CXX_TYPE>> &ptr) noexcept {        \
     return ptr.get();                                                          \
   }                                                                            \
-  std::vector<CXX_TYPE>                                                        \
+  CXX_API std::vector<CXX_TYPE>                                                        \
       *cxxbridge1$unique_ptr$std$vector$##RUST_TYPE##$release(                 \
           std::unique_ptr<std::vector<CXX_TYPE>> &ptr) noexcept {              \
     return ptr.release();                                                      \
@@ -712,11 +712,11 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
       rust::Vec<CXX_TYPE> *ptr) noexcept;                                      \
   CXX_API void cxxbridge1$rust_vec$##RUST_TYPE##$drop(                                 \
       rust::Vec<CXX_TYPE> *ptr) noexcept;                                      \
-  std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$len(                           \
+  CXX_API std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$len(                           \
       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
-  std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$capacity(                      \
+  CXX_API std::size_t cxxbridge1$rust_vec$##RUST_TYPE##$capacity(                      \
       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
-  const CXX_TYPE *cxxbridge1$rust_vec$##RUST_TYPE##$data(                      \
+  CXX_API const CXX_TYPE *cxxbridge1$rust_vec$##RUST_TYPE##$data(                      \
       const rust::Vec<CXX_TYPE> *ptr) noexcept;                                \
   CXX_API void cxxbridge1$rust_vec$##RUST_TYPE##$reserve_total(                        \
       rust::Vec<CXX_TYPE> *ptr, std::size_t new_cap) noexcept;                 \
@@ -770,7 +770,7 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
       std::shared_ptr<CXX_TYPE> *ptr, CXX_TYPE *raw) noexcept {                \
     new (ptr) std::shared_ptr<CXX_TYPE>(raw);                                  \
   }                                                                            \
-  CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$uninit(                    \
+  CXX_API CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$uninit(                    \
       std::shared_ptr<CXX_TYPE> *ptr) noexcept {                               \
     CXX_TYPE *uninit =                                                         \
         reinterpret_cast<CXX_TYPE *>(new rust::MaybeUninit<CXX_TYPE>);         \
@@ -782,7 +782,7 @@ static_assert(sizeof(std::string) <= kMaxExpectedWordsInString * sizeof(void *),
       std::shared_ptr<CXX_TYPE> *ptr) noexcept {                               \
     new (ptr) std::shared_ptr<CXX_TYPE>(self);                                 \
   }                                                                            \
-  const CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$get(                 \
+  CXX_API const CXX_TYPE *cxxbridge1$std$shared_ptr$##RUST_TYPE##$get(                 \
       const std::shared_ptr<CXX_TYPE> &self) noexcept {                        \
     return self.get();                                                         \
   }                                                                            \

@@ -1,0 +1,1 @@
+cl.exe /EHsc /std:c++17 main.cc /DCXX_SHARED /I "." cxx_shared_test.dll.lib /Fe:test_app.exe

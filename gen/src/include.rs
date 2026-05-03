@@ -66,10 +66,36 @@ pub(super) fn write(out: &mut OutFile) {
     let header = out.header;
     let include = &mut out.include;
     let cxx_header = include.has_cxx_header();
+    let opt = out.opt;
     let out = &mut include.content;
 
     if header {
         writeln!(out, "#pragma once");
+    }
+
+    // ADD THIS BLOCK:
+    if let Some(export_macro) = &opt.export_macro {
+        writeln!(out, "#ifndef {}", export_macro);
+        writeln!(out, "#if defined(_WIN32) || defined(__CYGWIN__)");
+        writeln!(out, "#if defined(CXX_EXPORTING)");
+        writeln!(out, "#define {} __declspec(dllexport)", export_macro);
+        writeln!(out, "#elif defined(CXX_SHARED)");
+        writeln!(out, "#define {} __declspec(dllimport)", export_macro);
+        writeln!(out, "#else");
+        writeln!(out, "#define {}", export_macro);
+        writeln!(out, "#endif");
+        writeln!(out, "#else");
+        writeln!(out, "#if defined(CXX_EXPORTING) || defined(CXX_SHARED)");
+        writeln!(
+            out,
+            "#define {} __attribute__((visibility(\"default\")))",
+            export_macro
+        );
+        writeln!(out, "#else");
+        writeln!(out, "#define {}", export_macro);
+        writeln!(out, "#endif");
+        writeln!(out, "#endif");
+        writeln!(out, "#endif\n");
     }
 
     for include in &include.custom {

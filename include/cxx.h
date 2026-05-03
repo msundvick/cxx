@@ -1,6 +1,5 @@
 #pragma once
 
-// In cxx-ai/include/cxx.h
 #ifndef CXX_API
 #if defined(_WIN32) || defined(__CYGWIN__)
   #if defined(CXX_EXPORTING)
@@ -55,7 +54,7 @@ struct unsafe_bitcopy_t;
 
 namespace {
 template <typename T>
-class CXX_API impl;
+class impl;
 }
 
 #ifndef CXXBRIDGE1_RUST_STRING
@@ -203,7 +202,7 @@ struct copy_assignable_if<false> {
 
 // https://cxx.rs/binding/slice.html
 template <typename T>
-class CXX_API Slice final
+class Slice final
     : private detail::copy_assignable_if<std::is_const<T>::value> {
 public:
   using value_type = T;
@@ -255,7 +254,7 @@ explicit Slice(C &c)
 #endif // __cpp_deduction_guides
 
 template <typename T>
-class CXX_API Slice<T>::iterator final {
+class Slice<T>::iterator final {
 public:
 #if __cplusplus >= 202002L
   using iterator_category = std::contiguous_iterator_tag;
@@ -308,7 +307,7 @@ static_assert(std::contiguous_iterator<rust::Slice<const uint8_t>::iterator>);
 #ifndef CXXBRIDGE1_RUST_BOX
 // https://cxx.rs/binding/box.html
 template <typename T>
-class CXX_API Box final {
+class Box final {
 public:
   using element_type = T;
   using const_pointer =
@@ -336,7 +335,7 @@ public:
 
   // Important: requires that `raw` came from an into_raw call. Do not pass a
   // pointer from `new` or any other source.
-  static Box from_raw(T *) noexcept;
+    static Box from_raw(T *) noexcept;
 
   T *into_raw() noexcept;
 
@@ -357,7 +356,7 @@ private:
 #ifndef CXXBRIDGE1_RUST_VEC
 // https://cxx.rs/binding/vec.html
 template <typename T>
-class CXX_API Vec final {
+class Vec final {
 public:
   using value_type = T;
 
@@ -424,10 +423,10 @@ private:
 #ifndef CXXBRIDGE1_RUST_FN
 // https://cxx.rs/binding/fn.html
 template <typename Signature>
-class CXX_API Fn;
+class Fn;
 
 template <typename Ret, typename... Args>
-class CXX_API Fn<Ret(Args...)> final {
+class Fn<Ret(Args...)> final {
 public:
   Ret operator()(Args... args) const noexcept;
   Fn operator*() const noexcept;
@@ -774,10 +773,10 @@ void Slice<T>::swap(Slice &rhs) noexcept {
 #ifndef CXXBRIDGE1_RUST_BOX
 #define CXXBRIDGE1_RUST_BOX
 template <typename T>
-class CXX_API Box<T>::uninit {};
+class Box<T>::uninit {};
 
 template <typename T>
-class CXX_API Box<T>::allocation {
+class Box<T>::allocation {
   static T *alloc() noexcept;
   static void dealloc(T *) noexcept;
 
@@ -1074,7 +1073,7 @@ struct is_complete<T, decltype(sizeof(T))> : std::true_type {};
 
 #ifndef CXXBRIDGE1_LAYOUT
 #define CXXBRIDGE1_LAYOUT
-class CXX_API layout {
+class layout {
   template <typename T>
   friend std::size_t size_of();
   template <typename T>
@@ -1141,10 +1140,10 @@ using void_t = typename make_void<Ts...>::type;
 
 template <typename Void, template <typename...> class, typename...>
 struct detect : std::false_type {};
-template <template <typename...> class CXX_API T, typename... A>
+template <template <typename...> class T, typename... A>
 struct detect<void_t<T<A...>>, T, A...> : std::true_type {};
 
-template <template <typename...> class CXX_API T, typename... A>
+template <template <typename...> class T, typename... A>
 using is_detected = detect<void, T, A...>;
 
 template <typename T>

@@ -12,6 +12,7 @@ pub struct Cfg<'a> {
     pub exported_header_prefixes: Vec<&'a str>,
     /// See [`CFG.exported_header_links`][CFG#cfgexported_header_links].
     pub exported_header_links: Vec<&'a str>,
+    pub export_macro: Option<&'a str>,
     /// See [`CFG.doxygen`][CFG#cfgdoxygen].
     pub doxygen: bool,
     marker: PhantomData<*const ()>, // !Send + !Sync
@@ -310,6 +311,7 @@ pub static mut CFG: Cfg = Cfg {
     include_prefix: "",
     exported_header_dirs: Vec::new(),
     exported_header_prefixes: Vec::new(),
+    export_macro: None,
     exported_header_links: Vec::new(),
     doxygen: false,
     marker: PhantomData,
@@ -323,6 +325,7 @@ impl<'a> Debug for Cfg<'a> {
             exported_header_prefixes,
             exported_header_links,
             doxygen,
+            export_macro,
             marker: _,
         } = self;
         formatter
@@ -332,6 +335,7 @@ impl<'a> Debug for Cfg<'a> {
             .field("exported_header_prefixes", exported_header_prefixes)
             .field("exported_header_links", exported_header_links)
             .field("doxygen", doxygen)
+            .field("export_macro", export_macro)
             .finish()
     }
 }
@@ -356,6 +360,7 @@ mod r#impl {
         exported_header_prefixes: Vec<InternedString>,
         exported_header_links: Vec<InternedString>,
         doxygen: bool,
+        export_macro: Option<InternedString>, // ADD THIS
     }
 
     impl CurrentCfg {
@@ -373,6 +378,7 @@ mod r#impl {
                 exported_header_prefixes,
                 exported_header_links,
                 doxygen,
+                export_macro: None, // ADD THIS
             }
         }
     }
@@ -409,12 +415,14 @@ mod r#impl {
             let exported_header_prefixes = current.exported_header_prefixes.vec();
             let exported_header_links = current.exported_header_links.vec();
             let doxygen = current.doxygen;
+            let export_macro = current.export_macro.map(|s| s.str()); // ADD THIS
             super::Cfg {
                 include_prefix,
                 exported_header_dirs,
                 exported_header_prefixes,
                 exported_header_links,
                 doxygen,
+                export_macro, // ADD THIS
                 marker: PhantomData,
             }
         }
@@ -480,6 +488,7 @@ mod r#impl {
                     exported_header_dirs,
                     exported_header_prefixes,
                     exported_header_links,
+                    export_macro, // ADD THIS
                     doxygen,
                     marker: _,
                 } = cfg;
@@ -489,6 +498,7 @@ mod r#impl {
                 current.exported_header_prefixes = vec::intern(exported_header_prefixes);
                 current.exported_header_links = vec::intern(exported_header_links);
                 current.doxygen = *doxygen;
+                current.export_macro = export_macro.map(intern); // ADD THIS
             } else {
                 CONST_DEREFS.with(|derefs| derefs.borrow_mut().remove(&self.handle()));
             }
